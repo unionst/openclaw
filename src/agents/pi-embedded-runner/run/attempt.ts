@@ -48,6 +48,7 @@ import { subscribeEmbeddedPiSession } from "../../pi-embedded-subscribe.js";
 import { applyPiCompactionSettingsFromConfig } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
 import { createOpenClawCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
+import { createProviderCompatStreamFn, resolveProviderCompat } from "../../provider-compat.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
@@ -457,6 +458,7 @@ export async function runEmbeddedAttempt(
       userTimeFormat,
       contextFiles,
       memoryCitationsMode: params.config?.memory?.citations,
+      compact: params.config?.agents?.defaults?.compact,
     });
     const systemPromptReport = buildSystemPromptReport({
       source: "run",
@@ -548,6 +550,7 @@ export async function runEmbeddedAttempt(
       const { builtInTools, customTools } = splitSdkTools({
         tools,
         sandboxEnabled: !!sandbox?.enabled,
+        compact: params.config?.agents?.defaults?.compact,
       });
 
       // Add client tools (OpenResponses hosted tools) to customTools
@@ -632,8 +635,25 @@ export async function runEmbeddedAttempt(
         const ollamaBaseUrl = modelBaseUrl || providerBaseUrl || OLLAMA_NATIVE_BASE_URL;
         activeSession.agent.streamFn = createOllamaStreamFn(ollamaBaseUrl);
       } else {
-        // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
-        activeSession.agent.streamFn = streamSimple;
+        // Check for provider-level compatibility overrides (e.g. Nous/vLLM streaming disabled).
+        const providerConfig = params.config?.models?.providers?.[params.model.provider];
+        const providerCompat = resolveProviderCompat(providerConfig);
+        if (providerCompat?.disableStreaming) {
+          const baseUrl =
+            (typeof params.model.baseUrl === "string" ? params.model.baseUrl.trim() : "") ||
+            (typeof providerConfig?.baseUrl === "string" ? providerConfig.baseUrl.trim() : "");
+          log.debug(
+            `using provider-compat streamFn for ${params.provider}/${params.modelId} (disableStreaming=${providerCompat.disableStreaming}, unwrapToolArgs=${providerCompat.unwrapToolArgs})`,
+          );
+          activeSession.agent.streamFn = createProviderCompatStreamFn(
+            baseUrl,
+            params.modelId,
+            providerCompat,
+          );
+        } else {
+          // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
+          activeSession.agent.streamFn = streamSimple;
+        }
       }
 
       applyExtraParamsToAgent(

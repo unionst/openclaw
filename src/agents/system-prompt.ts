@@ -187,6 +187,12 @@ export function buildAgentSystemPrompt(params: {
   ttsHint?: string;
   /** Controls which hardcoded sections to include. Defaults to "full". */
   promptMode?: PromptMode;
+  /** When true, strip verbose sections to reduce system prompt size for models
+   *  with limited tool-calling reliability at high context (e.g. Hermes 4 405B).
+   *  Skips: Tooling docs, Reply Tags, Messaging, Runtime, Workspace Files header,
+   *  Current Date/Time, Group Chat Context. Keeps: Safety, Tool Call Style,
+   *  Workspace path, Skills, Memory, Project Context, Silent Replies, Heartbeats. */
+  compact?: boolean;
   runtimeInfo?: {
     agentId?: string;
     host?: string;
@@ -356,6 +362,7 @@ export function buildAgentSystemPrompt(params: {
   const messageChannelOptions = listDeliverableMessageChannels().join("|");
   const promptMode = params.promptMode ?? "full";
   const isMinimal = promptMode === "minimal" || promptMode === "none";
+  const compact = params.compact ?? false;
   const sandboxContainerWorkspace = params.sandboxInfo?.containerWorkspaceDir?.trim();
   const sanitizedWorkspaceDir = sanitizeForPromptLiteral(params.workspaceDir);
   const sanitizedSandboxContainerWorkspace = sandboxContainerWorkspace
@@ -401,34 +408,39 @@ export function buildAgentSystemPrompt(params: {
   const lines = [
     "You are a personal assistant running inside OpenClaw.",
     "",
-    "## Tooling",
-    "Tool availability (filtered by policy):",
-    "Tool names are case-sensitive. Call tools exactly as listed.",
-    toolLines.length > 0
-      ? toolLines.join("\n")
+    // In compact mode, skip verbose tooling docs (redundant with API tools param)
+    ...(compact
+      ? []
       : [
-          "Pi lists the standard tools above. This runtime enables:",
-          "- grep: search file contents for patterns",
-          "- find: find files by glob pattern",
-          "- ls: list directory contents",
-          "- apply_patch: apply multi-file patches",
-          `- ${execToolName}: run shell commands (supports background via yieldMs/background)`,
-          `- ${processToolName}: manage background exec sessions`,
-          "- browser: control OpenClaw's dedicated browser",
-          "- canvas: present/eval/snapshot the Canvas",
-          "- nodes: list/describe/notify/camera/screen on paired nodes",
-          "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
-          "- sessions_list: list sessions",
-          "- sessions_history: fetch session history",
-          "- sessions_send: send to another session",
-          "- subagents: list/steer/kill sub-agent runs",
-          '- session_status: show usage/time/model state and answer "what model are we using?"',
-        ].join("\n"),
-    "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
-    `For long waits, avoid rapid poll loops: use ${execToolName} with enough yieldMs or ${processToolName}(action=poll, timeout=<ms>).`,
-    "If a task is more complex or takes longer, spawn a sub-agent. Completion is push-based: it will auto-announce when done.",
-    "Do not poll `subagents list` / `sessions_list` in a loop; only check status on-demand (for intervention, debugging, or when explicitly asked).",
-    "",
+          "## Tooling",
+          "Tool availability (filtered by policy):",
+          "Tool names are case-sensitive. Call tools exactly as listed.",
+          toolLines.length > 0
+            ? toolLines.join("\n")
+            : [
+                "Pi lists the standard tools above. This runtime enables:",
+                "- grep: search file contents for patterns",
+                "- find: find files by glob pattern",
+                "- ls: list directory contents",
+                "- apply_patch: apply multi-file patches",
+                `- ${execToolName}: run shell commands (supports background via yieldMs/background)`,
+                `- ${processToolName}: manage background exec sessions`,
+                "- browser: control OpenClaw's dedicated browser",
+                "- canvas: present/eval/snapshot the Canvas",
+                "- nodes: list/describe/notify/camera/screen on paired nodes",
+                "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
+                "- sessions_list: list sessions",
+                "- sessions_history: fetch session history",
+                "- sessions_send: send to another session",
+                "- subagents: list/steer/kill sub-agent runs",
+                '- session_status: show usage/time/model state and answer "what model are we using?"',
+              ].join("\n"),
+          "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
+          `For long waits, avoid rapid poll loops: use ${execToolName} with enough yieldMs or ${processToolName}(action=poll, timeout=<ms>).`,
+          "If a task is more complex or takes longer, spawn a sub-agent. Completion is push-based: it will auto-announce when done.",
+          "Do not poll `subagents list` / `sessions_list` in a loop; only check status on-demand (for intervention, debugging, or when explicitly asked).",
+          "",
+        ]),
     "## Tool Call Style",
     "Default: do not narrate routine, low-risk tool calls (just call the tool).",
     "Narrate only when it helps: multi-step work, complex/challenging problems, sensitive actions (e.g., deletions), or when the user explicitly asks.",
@@ -525,12 +537,18 @@ export function buildAgentSystemPrompt(params: {
       : "",
     params.sandboxInfo?.enabled ? "" : "",
     ...buildUserIdentitySection(ownerLine, isMinimal),
-    ...buildTimeSection({
-      userTimezone,
-    }),
-    "## Workspace Files (injected)",
-    "These user-editable files are loaded by OpenClaw and included below in Project Context.",
-    "",
+    ...(compact
+      ? []
+      : buildTimeSection({
+          userTimezone,
+        })),
+    ...(compact
+      ? []
+      : [
+          "## Workspace Files (injected)",
+          "These user-editable files are loaded by OpenClaw and included below in Project Context.",
+          "",
+        ]),
     ...buildReplyTagsSection(isMinimal),
     ...buildMessagingSection({
       isMinimal,
@@ -543,13 +561,13 @@ export function buildAgentSystemPrompt(params: {
     ...buildVoiceSection({ isMinimal, ttsHint: params.ttsHint }),
   ];
 
-  if (extraSystemPrompt) {
+  if (extraSystemPrompt && !compact) {
     // Use "Subagent Context" header for minimal mode (subagents), otherwise "Group Chat Context"
     const contextHeader =
       promptMode === "minimal" ? "## Subagent Context" : "## Group Chat Context";
     lines.push(contextHeader, extraSystemPrompt, "");
   }
-  if (params.reactionGuidance) {
+  if (params.reactionGuidance && !compact) {
     const { level, channel } = params.reactionGuidance;
     const guidanceText =
       level === "minimal"
@@ -629,11 +647,13 @@ export function buildAgentSystemPrompt(params: {
     );
   }
 
-  lines.push(
-    "## Runtime",
-    buildRuntimeLine(runtimeInfo, runtimeChannel, runtimeCapabilities, params.defaultThinkLevel),
-    `Reasoning: ${reasoningLevel} (hidden unless on/stream). Toggle /reasoning; /status shows Reasoning when enabled.`,
-  );
+  if (!compact) {
+    lines.push(
+      "## Runtime",
+      buildRuntimeLine(runtimeInfo, runtimeChannel, runtimeCapabilities, params.defaultThinkLevel),
+      `Reasoning: ${reasoningLevel} (hidden unless on/stream). Toggle /reasoning; /status shows Reasoning when enabled.`,
+    );
+  }
 
   return lines.filter(Boolean).join("\n");
 }

@@ -86,16 +86,152 @@ function splitToolExecuteArgs(args: ToolExecuteArgsAny): {
   };
 }
 
-export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
-  return tools.map((tool) => {
+// Tools filtered out in compact mode — only available to subagents.
+const COMPACT_EXCLUDED_TOOLS = new Set(["exec", "browser", "web_search", "web_fetch", "process"]);
+
+// Minimal tool schemas for compact mode. Short descriptions, required params only.
+// These replace the full schemas to reduce token usage for models like Hermes 4 405B.
+const COMPACT_TOOL_SCHEMAS: Record<
+  string,
+  { description: string; parameters: Record<string, unknown> }
+> = {
+  read: {
+    description: "Read file contents.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        offset: { type: "number" },
+        limit: { type: "number" },
+      },
+    },
+  },
+  write: {
+    description: "Write content to file.",
+    parameters: {
+      type: "object",
+      required: ["content"],
+      properties: {
+        path: { type: "string" },
+        content: { type: "string" },
+      },
+    },
+  },
+  edit: {
+    description: "Edit file by replacing text.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        oldText: { type: "string" },
+        newText: { type: "string" },
+      },
+    },
+  },
+  message: {
+    description: "Send iMessage. Actions: send, react, reply, sendAttachment.",
+    parameters: {
+      type: "object",
+      required: ["action"],
+      properties: {
+        action: {
+          type: "string",
+          enum: ["send", "react", "unsend", "reply", "sendWithEffect", "sendAttachment"],
+        },
+        target: { type: "string" },
+        message: { type: "string" },
+        media: { type: "string" },
+        filename: { type: "string" },
+      },
+    },
+  },
+  memory_search: {
+    description: "Search memory files.",
+    parameters: {
+      type: "object",
+      required: ["query"],
+      properties: {
+        query: { type: "string" },
+      },
+    },
+  },
+  memory_get: {
+    description: "Read memory file snippet.",
+    parameters: {
+      type: "object",
+      required: ["path"],
+      properties: {
+        path: { type: "string" },
+        from: { type: "number" },
+        lines: { type: "number" },
+      },
+    },
+  },
+  sessions_spawn: {
+    description: "Spawn a sub-agent session for complex tasks.",
+    parameters: {
+      type: "object",
+      required: ["task"],
+      properties: {
+        task: { type: "string" },
+        agentId: { type: "string" },
+      },
+    },
+  },
+  subagents: {
+    description: "List, steer, or kill sub-agent runs.",
+    parameters: {
+      type: "object",
+      required: ["action"],
+      properties: {
+        action: { type: "string" },
+        sessionId: { type: "string" },
+      },
+    },
+  },
+  cron: {
+    description: "Manage cron jobs and reminders.",
+    parameters: {
+      type: "object",
+      required: ["action"],
+      properties: {
+        action: { type: "string" },
+        schedule: { type: "string" },
+        systemEvent: { type: "string" },
+      },
+    },
+  },
+};
+
+export type ToToolDefinitionsOptions = {
+  /** When true, use minimal schemas and filter out complex tools. */
+  compact?: boolean;
+};
+
+export function toToolDefinitions(
+  tools: AnyAgentTool[],
+  options?: ToToolDefinitionsOptions,
+): ToolDefinition[] {
+  const compact = options?.compact ?? false;
+
+  // Filter out complex tools in compact mode
+  const filteredTools = compact
+    ? tools.filter((tool) => !COMPACT_EXCLUDED_TOOLS.has(normalizeToolName(tool.name)))
+    : tools;
+
+  return filteredTools.map((tool) => {
     const name = tool.name || "tool";
     const normalizedName = normalizeToolName(name);
     const beforeHookWrapped = isToolWrappedWithBeforeToolCallHook(tool);
+
+    // In compact mode, use minimal schema if available
+    const compactSchema = compact ? COMPACT_TOOL_SCHEMAS[normalizedName] : undefined;
+
     return {
       name,
       label: tool.label ?? name,
-      description: tool.description ?? "",
-      parameters: tool.parameters,
+      description: compactSchema?.description ?? tool.description ?? "",
+      parameters: (compactSchema?.parameters ?? tool.parameters) as ToolDefinition["parameters"],
       execute: async (...args: ToolExecuteArgs): Promise<AgentToolResult<unknown>> => {
         const { toolCallId, params, onUpdate, signal } = splitToolExecuteArgs(args);
         let executeParams = params;

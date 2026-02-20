@@ -41,6 +41,14 @@ export type ModelDefinitionConfig = {
   compat?: ModelCompatConfig;
 };
 
+/** Provider-level compatibility overrides for quirky inference endpoints. */
+export type ProviderCompatConfig = {
+  /** Force `stream: false` on all requests to this provider. */
+  disableStreaming?: boolean;
+  /** Unwrap tool-call arguments that arrive as double-encoded JSON strings. */
+  unwrapToolArgs?: boolean;
+};
+
 export type ModelProviderConfig = {
   baseUrl: string;
   apiKey?: string;
@@ -49,6 +57,8 @@ export type ModelProviderConfig = {
   headers?: Record<string, string>;
   authHeader?: boolean;
   models: ModelDefinitionConfig[];
+  /** Provider-level compat overrides (e.g. for Nous/vLLM streaming issues). */
+  providerCompat?: ProviderCompatConfig;
 };
 
 export type BedrockDiscoveryConfig = {

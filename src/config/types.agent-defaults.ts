@@ -235,6 +235,10 @@ export type AgentDefaultsConfig = {
      */
     includeReasoning?: boolean;
   };
+  /** Strip verbose system prompt sections and minimize tool schemas to reduce
+   *  payload size. Useful for models with limited tool-calling reliability at
+   *  high context (e.g. Hermes 4 405B). */
+  compact?: boolean;
   /** Max concurrent agent runs across all conversations. Default: 1 (sequential). */
   maxConcurrent?: number;
   /** Sub-agent defaults (spawned via sessions_spawn). */
