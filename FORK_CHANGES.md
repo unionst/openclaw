@@ -75,6 +75,7 @@ Added compact mode support to `buildAgentSystemPrompt`. When `compact: true`:
 - Group chat context
 - Current date/time verbose block
 - Workspace files injection header
+- Skills section (subagent handles skill execution; primary agent delegates via workspace guidance)
 
 **Kept sections** (always included):
 
@@ -82,7 +83,6 @@ Added compact mode support to `buildAgentSystemPrompt`. When `compact: true`:
 - Safety guidelines
 - Tool call style
 - Workspace path
-- Skills
 - Memory
 - Project context
 - Silent replies

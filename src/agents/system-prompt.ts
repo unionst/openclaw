@@ -17,9 +17,10 @@ export type PromptMode = "full" | "minimal" | "none";
 function buildSkillsSection(params: {
   skillsPrompt?: string;
   isMinimal: boolean;
+  compact: boolean;
   readToolName: string;
 }) {
-  if (params.isMinimal) {
+  if (params.isMinimal || params.compact) {
     return [];
   }
   const trimmed = params.skillsPrompt?.trim();
@@ -386,6 +387,7 @@ export function buildAgentSystemPrompt(params: {
   const skillsSection = buildSkillsSection({
     skillsPrompt,
     isMinimal,
+    compact,
     readToolName,
   });
   const memorySection = buildMemorySection({
