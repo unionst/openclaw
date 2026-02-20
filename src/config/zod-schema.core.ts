@@ -66,6 +66,13 @@ export const ModelProviderSchema = z
     headers: z.record(z.string(), z.string()).optional(),
     authHeader: z.boolean().optional(),
     models: z.array(ModelDefinitionSchema),
+    providerCompat: z
+      .object({
+        disableStreaming: z.boolean().optional(),
+        unwrapToolArgs: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

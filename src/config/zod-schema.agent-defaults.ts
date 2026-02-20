@@ -168,6 +168,7 @@ export const AgentDefaultsSchema = z
       .strict()
       .optional(),
     sandbox: AgentSandboxSchema,
+    compact: z.boolean().optional(),
   })
   .strict()
   .optional();
