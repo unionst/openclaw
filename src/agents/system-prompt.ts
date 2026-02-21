@@ -401,7 +401,12 @@ export function buildAgentSystemPrompt(params: {
   }
 
   const lines = [
-    ...(compact ? [] : ["You are a personal assistant running inside OpenClaw.", ""]),
+    ...(compact
+      ? [
+          "You are a personal companion. Your personality, behavior, and communication style are defined in the SOUL.md file below in Project Context. Follow it closely.",
+          "",
+        ]
+      : ["You are a personal assistant running inside OpenClaw.", ""]),
     // In compact mode, skip verbose tooling docs (redundant with API tools param)
     ...(compact
       ? []
