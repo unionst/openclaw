@@ -20,7 +20,7 @@ function buildSkillsSection(params: {
   compact: boolean;
   readToolName: string;
 }) {
-  if (params.isMinimal || params.compact) {
+  if (params.compact) {
     return [];
   }
   const trimmed = params.skillsPrompt?.trim();
@@ -151,7 +151,7 @@ function buildVoiceSection(params: { isMinimal: boolean; ttsHint?: string }) {
 
 function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readToolName: string }) {
   const docsPath = params.docsPath?.trim();
-  if (!docsPath || params.isMinimal) {
+  if (!docsPath) {
     return [];
   }
   return [

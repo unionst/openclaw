@@ -420,10 +420,13 @@ export async function runEmbeddedAttempt(
       },
     });
     const isDefaultAgent = sessionAgentId === defaultAgentId;
-    const promptMode =
-      isSubagentSessionKey(params.sessionKey) || isCronSessionKey(params.sessionKey)
-        ? "minimal"
-        : "full";
+    const isSubagentOrCron =
+      isSubagentSessionKey(params.sessionKey) || isCronSessionKey(params.sessionKey);
+    const promptMode = isSubagentOrCron
+      ? (params.config?.agents?.defaults?.subagents?.promptMode ?? "minimal")
+      : "full";
+    // Compact mode only applies to the primary agent, not subagents
+    const compact = !isSubagentOrCron && (params.config?.agents?.defaults?.compact ?? false);
     const docsPath = await resolveOpenClawDocsPath({
       workspaceDir: effectiveWorkspace,
       argv1: process.argv[1],
@@ -458,7 +461,7 @@ export async function runEmbeddedAttempt(
       userTimeFormat,
       contextFiles,
       memoryCitationsMode: params.config?.memory?.citations,
-      compact: params.config?.agents?.defaults?.compact,
+      compact,
     });
     const systemPromptReport = buildSystemPromptReport({
       source: "run",
@@ -550,7 +553,7 @@ export async function runEmbeddedAttempt(
       const { builtInTools, customTools } = splitSdkTools({
         tools,
         sandboxEnabled: !!sandbox?.enabled,
-        compact: params.config?.agents?.defaults?.compact,
+        compact,
       });
 
       // Add client tools (OpenResponses hosted tools) to customTools

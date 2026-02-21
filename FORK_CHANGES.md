@@ -18,6 +18,9 @@ as the primary conversational model with reliable tool calling:
 Both features are opt-in via provider and agent config, and have zero effect when
 not enabled.
 
+3. **Subagent Prompt Mode** — Makes subagent `promptMode` configurable and keeps
+   skills/docs sections in minimal mode so subagents can discover workspace skills.
+
 ---
 
 ## New Files
@@ -61,7 +64,20 @@ export type ProviderCompatConfig = {
 Added `compact?: boolean` to `AgentDefaultsConfig`. When true, enables compact mode
 for system prompts and tool schemas.
 
+Added `promptMode?: "full" | "minimal" | "none"` to the `subagents` field inside
+`AgentDefaultsConfig`. Defaults to `"minimal"` when not set.
+
+### `src/config/zod-schema.agent-defaults.ts`
+
+Added `promptMode` Zod field to the `subagents` object schema:
+`z.union([z.literal("full"), z.literal("minimal"), z.literal("none")]).optional()`
+
 ### `src/agents/system-prompt.ts`
+
+**Subagent prompt mode: keep skills and docs in minimal mode.** Removed `isMinimal`
+guard from `buildSkillsSection` and `buildDocsSection` so subagents (promptMode=minimal)
+still receive skills discovery prompts and docs paths. The `compact` guard remains,
+so compact mode (for the primary agent) still strips these sections.
 
 Added compact mode support to `buildAgentSystemPrompt`. When `compact: true`:
 
@@ -128,6 +144,10 @@ Two changes:
 2. **Compact flag passthrough** — Reads `compact` from
    `params.config?.agents?.defaults?.compact` and passes it to both
    `buildEmbeddedSystemPrompt` and `splitSdkTools`.
+
+3. **Configurable subagent promptMode** — Reads `promptMode` from
+   `params.config?.agents?.defaults?.subagents?.promptMode` instead of hardcoding
+   `"minimal"`. Falls back to `"minimal"` when not configured.
 
 ---
 

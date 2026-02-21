@@ -164,6 +164,10 @@ export const AgentDefaultsSchema = z
         archiveAfterMinutes: z.number().int().positive().optional(),
         model: AgentModelSchema.optional(),
         thinking: z.string().optional(),
+        promptMode: z
+          .union([z.literal("full"), z.literal("minimal"), z.literal("none")])
+          .optional()
+          .describe("Prompt mode for spawned sub-agents. Default: minimal."),
       })
       .strict()
       .optional(),
