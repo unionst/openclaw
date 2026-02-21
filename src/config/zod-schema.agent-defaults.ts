@@ -168,6 +168,12 @@ export const AgentDefaultsSchema = z
           .union([z.literal("full"), z.literal("minimal"), z.literal("none")])
           .optional()
           .describe("Prompt mode for spawned sub-agents. Default: minimal."),
+        announceDelivery: z
+          .union([z.literal("direct"), z.literal("agent")])
+          .optional()
+          .describe(
+            "How sub-agent completion results are delivered. 'direct' sends raw text (default). 'agent' routes through the parent agent so it can use tools (e.g. attach files).",
+          ),
       })
       .strict()
       .optional(),

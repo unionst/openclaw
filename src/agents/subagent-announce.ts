@@ -459,7 +459,9 @@ async function sendSubagentAnnounceDirectly(params: {
     const hasCompletionDirectTarget =
       !params.requesterIsSubagent && Boolean(completionChannel) && Boolean(completionTo);
 
+    const announceDelivery = cfg?.agents?.defaults?.subagents?.announceDelivery;
     if (
+      announceDelivery !== "agent" &&
       params.expectsCompletionMessage &&
       hasCompletionDirectTarget &&
       params.completionMessage?.trim()

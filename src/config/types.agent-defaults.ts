@@ -257,6 +257,12 @@ export type AgentDefaultsConfig = {
     thinking?: string;
     /** Prompt mode for spawned sub-agents. Default: "minimal". */
     promptMode?: "full" | "minimal" | "none";
+    /**
+     * How sub-agent completion results are delivered to the user.
+     * - "direct": send the raw completion text directly (default, faster but no tool use)
+     * - "agent": route through the parent agent so it can use tools (e.g. attach files)
+     */
+    announceDelivery?: "direct" | "agent";
   };
   /** Optional sandbox settings for non-main sessions. */
   sandbox?: {
