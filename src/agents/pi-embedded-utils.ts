@@ -34,6 +34,24 @@ export function stripMinimaxToolCallXml(text: string): string {
 }
 
 /**
+ * Strip generic tool call XML tags that leak into text content.
+ * Some models (e.g. Hermes 4) embed <tool_call>, <function_call>, or
+ * <tool_response> XML in text blocks instead of using structured tool calls.
+ */
+export function stripGenericToolCallXml(text: string): string {
+  if (!text || !/tool_call|function_call|tool_response/i.test(text)) {
+    return text;
+  }
+  let cleaned = text;
+  cleaned = cleaned.replace(/<tool_call\b[^>]*>[\s\S]*?<\/tool_call>/gi, "");
+  cleaned = cleaned.replace(/<function_call\b[^>]*>[\s\S]*?<\/function_call>/gi, "");
+  cleaned = cleaned.replace(/<tool_response\b[^>]*>[\s\S]*?<\/tool_response>/gi, "");
+  // Remove stray opening/closing tags without matching pairs.
+  cleaned = cleaned.replace(/<\/?(?:tool_call|function_call|tool_response)\b[^>]*>/gi, "");
+  return cleaned;
+}
+
+/**
  * Strip downgraded tool call text representations that leak into text content.
  * When replaying history to Gemini, tool calls without `thought_signature` are
  * downgraded to text blocks like `[Tool Call: name (ID: ...)]`. These should
@@ -207,12 +225,34 @@ export function stripThinkingTagsFromText(text: string): string {
   return stripReasoningTagsFromText(text, { mode: "strict", trim: "both" });
 }
 
+const GARBAGE_TOKENS = new Set([
+  "nil",
+  "null",
+  "none",
+  "undefined",
+  "n/a",
+  "na",
+  "nan",
+  "empty",
+  "void",
+  "noop",
+  "no-op",
+  "eos",
+  "<|endoftext|>",
+  "<|end|>",
+]);
+
+export function isGarbageOnlyText(text: string): boolean {
+  const trimmed = text?.trim().toLowerCase();
+  return !trimmed || GARBAGE_TOKENS.has(trimmed);
+}
+
 export function extractAssistantText(msg: AssistantMessage): string {
   const extracted =
     extractTextFromChatContent(msg.content, {
       sanitizeText: (text) =>
         stripThinkingTagsFromText(
-          stripDowngradedToolCallText(stripMinimaxToolCallXml(text)),
+          stripDowngradedToolCallText(stripGenericToolCallXml(stripMinimaxToolCallXml(text))),
         ).trim(),
       joinWith: "\n",
       normalizeText: (text) => text.trim(),
@@ -220,7 +260,11 @@ export function extractAssistantText(msg: AssistantMessage): string {
   // Only apply keyword-based error rewrites when the assistant message is actually an error.
   // Otherwise normal prose that *mentions* errors (e.g. "context overflow") can get clobbered.
   const errorContext = msg.stopReason === "error" || Boolean(msg.errorMessage?.trim());
-  return sanitizeUserFacingText(extracted, { errorContext });
+  const sanitized = sanitizeUserFacingText(extracted, { errorContext });
+  if (isGarbageOnlyText(sanitized)) {
+    return "";
+  }
+  return sanitized;
 }
 
 export function extractAssistantThinking(msg: AssistantMessage): string {

@@ -432,7 +432,7 @@ export function buildAgentSystemPrompt(params: {
   const lines = [
     ...(compact
       ? [
-          "You are a personal companion. Your personality, behavior, and communication style are defined in the SOUL.md file below in Project Context. Follow it closely.",
+          "You are a personal companion. Your personality, behavior, and communication style are defined in SOUL.md below. Follow SOUL.md exactly — especially the rules about what you never do unprompted.",
           "",
         ]
       : ["You are a personal assistant running inside OpenClaw.", ""]),

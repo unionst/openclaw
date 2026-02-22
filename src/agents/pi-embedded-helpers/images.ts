@@ -1,5 +1,6 @@
 import type { AgentMessage, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { ImageSanitizationLimits } from "../image-sanitization.js";
+import { isGarbageOnlyText } from "../pi-embedded-utils.js";
 import type { ToolCallIdMode } from "../tool-call-id.js";
 import { sanitizeToolCallIdsForCloudCodeAssist } from "../tool-call-id.js";
 import { sanitizeContentBlocksImages } from "../tool-images.js";
@@ -25,7 +26,7 @@ export function isEmptyAssistantMessageContent(
     if (rec.type !== "text") {
       return false;
     }
-    return typeof rec.text !== "string" || rec.text.trim().length === 0;
+    return typeof rec.text !== "string" || isGarbageOnlyText(rec.text);
   });
 }
 

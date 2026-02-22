@@ -21,6 +21,7 @@ import { stripReasoningTagsFromText } from "../../shared/text/reasoning-tags.js"
 import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { listChannelSupportedActions } from "../channel-tools.js";
+import { isGarbageOnlyText, stripGenericToolCallXml } from "../pi-embedded-utils.js";
 import { channelTargetSchema, channelTargetsSchema, stringEnum } from "../schema/typebox.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
@@ -592,7 +593,12 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
       // in tool arguments, and the messaging tool send path has no other tag filtering.
       for (const field of ["text", "content", "message", "caption"]) {
         if (typeof params[field] === "string") {
-          params[field] = stripReasoningTagsFromText(params[field]);
+          params[field] = stripGenericToolCallXml(stripReasoningTagsFromText(params[field]));
+          if (isGarbageOnlyText(params[field] as string)) {
+            throw new Error(
+              "Message content was empty or contained only garbage tokens. Please provide actual message text.",
+            );
+          }
         }
       }
 
