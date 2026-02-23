@@ -10,6 +10,7 @@ import {
   resolveSingleWebhookTarget,
   resolveWebhookTargets,
 } from "openclaw/plugin-sdk";
+import { sendBlueBubblesTyping } from "./chat.js";
 import {
   normalizeWebhookMessage,
   normalizeWebhookReaction,
@@ -204,6 +205,11 @@ function abortActiveRunForChat(target: WebhookTarget, chatGuid: string): void {
       `typing-gate: cleared queues followups=${cleared.followupCleared} lane=${cleared.laneCleared}`,
     );
   }
+
+  sendBlueBubblesTyping(chatGuid, false, {
+    cfg: config,
+    accountId: account.accountId,
+  }).catch(() => {});
 }
 
 function handleTypingIndicator(params: {
