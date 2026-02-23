@@ -33,6 +33,9 @@ type CreateInboundDebouncer =
   typeof import("../../auto-reply/inbound-debounce.js").createInboundDebouncer;
 type ResolveInboundDebounceMs =
   typeof import("../../auto-reply/inbound-debounce.js").resolveInboundDebounceMs;
+type AbortEmbeddedPiRun = typeof import("../../agents/pi-embedded.js").abortEmbeddedPiRun;
+type ClearSessionQueues = typeof import("../../auto-reply/reply/queue.js").clearSessionQueues;
+type LoadSessionStore = typeof import("../../config/sessions.js").loadSessionStore;
 type ResolveCommandAuthorizedFromAuthorizers =
   typeof import("../../channels/command-gating.js").resolveCommandAuthorizedFromAuthorizers;
 type ResolveTextChunkLimit = typeof import("../../auto-reply/chunk.js").resolveTextChunkLimit;
@@ -250,6 +253,9 @@ export type PluginRuntime = {
       recordSessionMetaFromInbound: RecordSessionMetaFromInbound;
       recordInboundSession: RecordInboundSession;
       updateLastRoute: UpdateLastRoute;
+      loadSessionStore: LoadSessionStore;
+      abortEmbeddedPiRun: AbortEmbeddedPiRun;
+      clearSessionQueues: ClearSessionQueues;
     };
     mentions: {
       buildMentionRegexes: BuildMentionRegexes;

@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { resolveEffectiveMessagesConfig, resolveHumanDelayConfig } from "../../agents/identity.js";
+import { abortEmbeddedPiRun } from "../../agents/pi-embedded.js";
 import { createMemoryGetTool, createMemorySearchTool } from "../../agents/tools/memory-tool.js";
 import { handleSlackAction } from "../../agents/tools/slack-actions.js";
 import {
@@ -34,6 +35,7 @@ import {
   matchesMentionWithExplicit,
 } from "../../auto-reply/reply/mentions.js";
 import { dispatchReplyWithBufferedBlockDispatcher } from "../../auto-reply/reply/provider-dispatcher.js";
+import { clearSessionQueues } from "../../auto-reply/reply/queue.js";
 import { createReplyDispatcherWithTyping } from "../../auto-reply/reply/reply-dispatcher.js";
 import { removeAckReactionAfterReply, shouldAckReaction } from "../../channels/ack-reactions.js";
 import { resolveCommandAuthorizedFromAuthorizers } from "../../channels/command-gating.js";
@@ -51,6 +53,7 @@ import {
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import { resolveStateDir } from "../../config/paths.js";
 import {
+  loadSessionStore,
   readSessionUpdatedAt,
   recordSessionMetaFromInbound,
   resolveStorePath,
@@ -332,6 +335,9 @@ function createRuntimeChannel(): PluginRuntime["channel"] {
       recordSessionMetaFromInbound,
       recordInboundSession,
       updateLastRoute,
+      loadSessionStore,
+      abortEmbeddedPiRun,
+      clearSessionQueues,
     },
     mentions: {
       buildMentionRegexes,

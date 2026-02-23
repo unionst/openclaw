@@ -176,6 +176,55 @@ Two changes:
 }
 ```
 
+4. **Typing Gate** — Pauses the debouncer and aborts active model runs when the
+   user starts typing in iMessage, preventing the companion from talking over
+   the user. Resumes when typing stops. On by default, configurable via
+   `typingGate: false` per BlueBubbles account.
+
+---
+
+## Typing Gate
+
+### `src/auto-reply/inbound-debounce.ts`
+
+Added `isPaused` callback parameter and `resumeMatching(predicate)` method to
+`createInboundDebouncer`. When `isPaused` returns true for a key, `scheduleFlush`
+skips scheduling. `resumeMatching` re-schedules flush for all buffers matching a
+predicate — used to resume after typing stops.
+
+### `src/plugins/runtime/types.ts` + `src/plugins/runtime/index.ts`
+
+Exposed three functions on `PluginRuntime.channel.session`:
+
+- `loadSessionStore` — read session store to look up sessionId
+- `abortEmbeddedPiRun` — cancel an active model run by sessionId
+- `clearSessionQueues` — clear followup/command queues by session key
+
+### `extensions/bluebubbles/src/monitor.ts`
+
+- Added `typing-indicator` to `allowedEventTypes`
+- Added typing indicator webhook handler with inline auth resolution
+- Added `handleTypingIndicator()` — pause/resume debouncer + abort active runs
+- Added `abortActiveRunForChat()` — resolves session key from chatGuid, looks up
+  session store, calls `abortEmbeddedPiRun` + `clearSessionQueues`
+- Added `isPaused` callback to `getOrCreateDebouncer()` that checks per-account
+  paused chat state
+- Respects `typingGate` (default: true) and `typingGateTimeoutMs` (default: 60s)
+  from BlueBubbles account config
+
+### `extensions/bluebubbles/src/types.ts`
+
+Added `typingGate?: boolean` and `typingGateTimeoutMs?: number` to
+`BlueBubblesAccountConfig`.
+
+### `extensions/bluebubbles/src/config-schema.ts`
+
+Added Zod validation for `typingGate` and `typingGateTimeoutMs`.
+
+### `extensions/bluebubbles/src/monitor.test.ts`
+
+Added mock stubs for the three new `PluginRuntime.channel.session` methods.
+
 ---
 
 ## Upstream Sync Checklist

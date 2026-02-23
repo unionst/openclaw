@@ -201,6 +201,23 @@ function createMockRuntime(): PluginRuntime {
           vi.fn() as unknown as PluginRuntime["channel"]["session"]["recordSessionMetaFromInbound"],
         updateLastRoute:
           vi.fn() as unknown as PluginRuntime["channel"]["session"]["updateLastRoute"],
+        loadSessionStore: vi
+          .fn()
+          .mockReturnValue(
+            {},
+          ) as unknown as PluginRuntime["channel"]["session"]["loadSessionStore"],
+        abortEmbeddedPiRun: vi
+          .fn()
+          .mockReturnValue(
+            false,
+          ) as unknown as PluginRuntime["channel"]["session"]["abortEmbeddedPiRun"],
+        clearSessionQueues: vi
+          .fn()
+          .mockReturnValue({
+            followupCleared: 0,
+            laneCleared: 0,
+            keys: [],
+          }) as unknown as PluginRuntime["channel"]["session"]["clearSessionQueues"],
       },
       mentions: {
         buildMentionRegexes:

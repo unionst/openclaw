@@ -13,6 +13,7 @@ import {
 import {
   normalizeWebhookMessage,
   normalizeWebhookReaction,
+  resolveGroupFlagFromChatGuid,
   type NormalizedWebhookMessage,
 } from "./monitor-normalize.js";
 import { logVerbose, processMessage, processReaction } from "./monitor-processing.js";
@@ -118,6 +119,7 @@ const webhookTargets = new Map<string, WebhookTarget[]>();
 type BlueBubblesDebouncer = {
   enqueue: (item: BlueBubblesDebounceEntry) => Promise<void>;
   flushKey: (key: string) => Promise<void>;
+  resumeMatching: (predicate: (key: string) => boolean) => void;
 };
 
 /**
@@ -125,6 +127,131 @@ type BlueBubblesDebouncer = {
  * Each target gets its own debouncer keyed by a unique identifier.
  */
 const targetDebouncers = new Map<WebhookTarget, BlueBubblesDebouncer>();
+
+const TYPING_GATE_TIMEOUT_MS = 60_000;
+
+type TypingGateState = {
+  pausedChats: Set<string>;
+  timeouts: Map<string, ReturnType<typeof setTimeout>>;
+};
+
+const typingGateState = new Map<string, TypingGateState>();
+
+function getOrCreateTypingGateState(accountId: string): TypingGateState {
+  const existing = typingGateState.get(accountId);
+  if (existing) {
+    return existing;
+  }
+  const state: TypingGateState = { pausedChats: new Set(), timeouts: new Map() };
+  typingGateState.set(accountId, state);
+  return state;
+}
+
+function isChatPaused(accountId: string, key: string): boolean {
+  const state = typingGateState.get(accountId);
+  if (!state) {
+    return false;
+  }
+  for (const chatGuid of state.pausedChats) {
+    if (key.includes(chatGuid)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function resolvePeerIdFromChatGuid(chatGuid: string): { kind: "group" | "direct"; id: string } {
+  const isGroup = resolveGroupFlagFromChatGuid(chatGuid);
+  if (isGroup) {
+    return { kind: "group", id: chatGuid };
+  }
+  const parts = chatGuid.split(";");
+  const handle = parts.length >= 3 ? parts.slice(2).join(";") : chatGuid;
+  return { kind: "direct", id: handle };
+}
+
+function abortActiveRunForChat(target: WebhookTarget, chatGuid: string): void {
+  const { account, config, core, runtime } = target;
+  const peer = resolvePeerIdFromChatGuid(chatGuid);
+
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg: config,
+    channel: "bluebubbles",
+    accountId: account.accountId,
+    peer,
+  });
+
+  const sessionKey = route.sessionKey;
+  const storePath = core.channel.session.resolveStorePath(config.session?.store, {
+    agentId: route.agentId,
+  });
+  const store = core.channel.session.loadSessionStore(storePath);
+  const entry = store[sessionKey];
+  const sessionId = entry?.sessionId;
+
+  if (sessionId) {
+    const aborted = core.channel.session.abortEmbeddedPiRun(sessionId);
+    if (aborted) {
+      logVerbose(core, runtime, `typing-gate: aborted run for session=${sessionId}`);
+    }
+  }
+
+  const cleared = core.channel.session.clearSessionQueues([sessionKey]);
+  if (cleared.followupCleared > 0 || cleared.laneCleared > 0) {
+    logVerbose(
+      core,
+      runtime,
+      `typing-gate: cleared queues followups=${cleared.followupCleared} lane=${cleared.laneCleared}`,
+    );
+  }
+}
+
+function handleTypingIndicator(params: {
+  target: WebhookTarget;
+  chatGuid: string;
+  isTyping: boolean;
+}): void {
+  const { target, chatGuid, isTyping } = params;
+  const { account, core, runtime } = target;
+  const accountId = account.accountId;
+  const state = getOrCreateTypingGateState(accountId);
+  const timeoutMs = account.config.typingGateTimeoutMs ?? TYPING_GATE_TIMEOUT_MS;
+
+  if (isTyping) {
+    state.pausedChats.add(chatGuid);
+
+    abortActiveRunForChat(target, chatGuid);
+
+    const existingTimeout = state.timeouts.get(chatGuid);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+    const safetyTimeout = setTimeout(() => {
+      state.pausedChats.delete(chatGuid);
+      state.timeouts.delete(chatGuid);
+      logVerbose(core, runtime, `typing-gate: safety timeout expired for ${chatGuid}`);
+      const debouncer = targetDebouncers.get(target);
+      debouncer?.resumeMatching((key) => key.includes(chatGuid));
+    }, timeoutMs);
+    safetyTimeout.unref?.();
+    state.timeouts.set(chatGuid, safetyTimeout);
+
+    logVerbose(core, runtime, `typing-gate: paused for ${chatGuid}`);
+  } else {
+    state.pausedChats.delete(chatGuid);
+
+    const existingTimeout = state.timeouts.get(chatGuid);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      state.timeouts.delete(chatGuid);
+    }
+
+    const debouncer = targetDebouncers.get(target);
+    debouncer?.resumeMatching((key) => key.includes(chatGuid));
+
+    logVerbose(core, runtime, `typing-gate: resumed for ${chatGuid}`);
+  }
+}
 
 function resolveBlueBubblesDebounceMs(
   config: OpenClawConfig,
@@ -152,6 +279,7 @@ function getOrCreateDebouncer(target: WebhookTarget) {
 
   const debouncer = core.channel.debounce.createInboundDebouncer<BlueBubblesDebounceEntry>({
     debounceMs: resolveBlueBubblesDebounceMs(config, core),
+    isPaused: (key) => isChatPaused(account.accountId, key),
     buildKey: (entry) => {
       const msg = entry.message;
       // Prefer stable, shared identifiers to coalesce rapid-fire webhook events for the
@@ -377,6 +505,7 @@ export async function handleBlueBubblesWebhookRequest(
     "updated-message",
     "message-reaction",
     "reaction",
+    "typing-indicator",
   ]);
   if (eventType && !allowedEventTypes.has(eventType)) {
     res.statusCode = 200;
@@ -386,6 +515,43 @@ export async function handleBlueBubblesWebhookRequest(
     }
     return true;
   }
+
+  if (eventType === "typing-indicator") {
+    const data = asRecord(payload.data) ?? payload;
+    const display = data.display === true;
+    const chatGuid = typeof data.guid === "string" ? data.guid.trim() : "";
+
+    if (chatGuid) {
+      const guidParam = url.searchParams.get("guid") ?? url.searchParams.get("password");
+      const headerToken =
+        req.headers["x-guid"] ??
+        req.headers["x-password"] ??
+        req.headers["x-bluebubbles-guid"] ??
+        req.headers["authorization"];
+      const typingGuid =
+        (Array.isArray(headerToken) ? headerToken[0] : headerToken) ?? guidParam ?? "";
+      const typingTarget = resolveSingleWebhookTarget(targets, (t) => {
+        const token = t.account.config.password?.trim() ?? "";
+        return safeEqualSecret(typingGuid, token);
+      });
+
+      if (
+        typingTarget.kind === "single" &&
+        typingTarget.target.account.config.typingGate !== false
+      ) {
+        handleTypingIndicator({
+          target: typingTarget.target,
+          chatGuid,
+          isTyping: display,
+        });
+      }
+    }
+
+    res.statusCode = 200;
+    res.end("ok");
+    return true;
+  }
+
   const reaction = normalizeWebhookReaction(payload);
   if (
     (eventType === "updated-message" ||

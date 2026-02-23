@@ -53,6 +53,10 @@ export type BlueBubblesAccountConfig = {
   mediaLocalRoots?: string[];
   /** Send read receipts for incoming messages (default: true). */
   sendReadReceipts?: boolean;
+  /** Pause replies and abort active runs when user starts typing (default: true). */
+  typingGate?: boolean;
+  /** Safety timeout in ms before auto-resuming if no stop-typing event arrives (default: 60000). */
+  typingGateTimeoutMs?: number;
   /** Per-group configuration keyed by chat GUID or identifier. */
   groups?: Record<string, BlueBubblesGroupConfig>;
 };

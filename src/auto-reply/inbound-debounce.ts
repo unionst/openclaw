@@ -46,6 +46,7 @@ export function createInboundDebouncer<T>(params: {
   resolveDebounceMs?: (item: T) => number | undefined;
   onFlush: (items: T[]) => Promise<void>;
   onError?: (err: unknown, items: T[]) => void;
+  isPaused?: (key: string) => boolean;
 }) {
   const buffers = new Map<string, DebounceBuffer<T>>();
   const defaultDebounceMs = Math.max(0, Math.trunc(params.debounceMs));
@@ -85,6 +86,10 @@ export function createInboundDebouncer<T>(params: {
   const scheduleFlush = (key: string, buffer: DebounceBuffer<T>) => {
     if (buffer.timeout) {
       clearTimeout(buffer.timeout);
+      buffer.timeout = null;
+    }
+    if (params.isPaused?.(key)) {
+      return;
     }
     buffer.timeout = setTimeout(() => {
       void flushBuffer(key, buffer);
@@ -118,5 +123,13 @@ export function createInboundDebouncer<T>(params: {
     scheduleFlush(key, buffer);
   };
 
-  return { enqueue, flushKey };
+  const resumeMatching = (predicate: (key: string) => boolean) => {
+    for (const [key, buffer] of buffers) {
+      if (predicate(key) && buffer.items.length > 0 && !buffer.timeout) {
+        scheduleFlush(key, buffer);
+      }
+    }
+  };
+
+  return { enqueue, flushKey, resumeMatching };
 }
