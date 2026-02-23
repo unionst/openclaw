@@ -10,6 +10,7 @@ import {
   BlockStreamingCoalesceSchema,
   CliBackendSchema,
   HumanDelaySchema,
+  TypingModeSchema,
 } from "./zod-schema.core.js";
 
 export const AgentDefaultsSchema = z
@@ -130,14 +131,7 @@ export const AgentDefaultsSchema = z
     mediaMaxMb: z.number().positive().optional(),
     imageMaxDimensionPx: z.number().int().positive().optional(),
     typingIntervalSeconds: z.number().int().positive().optional(),
-    typingMode: z
-      .union([
-        z.literal("never"),
-        z.literal("instant"),
-        z.literal("thinking"),
-        z.literal("message"),
-      ])
-      .optional(),
+    typingMode: TypingModeSchema.optional(),
     heartbeat: HeartbeatSchema,
     maxConcurrent: z.number().int().positive().optional(),
     subagents: z
@@ -174,6 +168,7 @@ export const AgentDefaultsSchema = z
           .describe(
             "How sub-agent completion results are delivered. 'direct' sends raw text (default). 'agent' routes through the parent agent so it can use tools (e.g. attach files).",
           ),
+        announceTimeoutMs: z.number().int().positive().optional(),
       })
       .strict()
       .optional(),
