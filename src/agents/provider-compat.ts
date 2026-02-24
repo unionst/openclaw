@@ -393,9 +393,6 @@ export function createProviderCompatStreamFn(
         if (typeof options?.maxTokens === "number") {
           body.max_tokens = options.maxTokens;
         }
-        if (compat.enableThinking) {
-          body.chat_template_kwargs = { thinking: true };
-        }
 
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
@@ -488,7 +485,7 @@ export function resolveProviderCompat(
     return null;
   }
   const pc = providerConfig.providerCompat;
-  if (!pc.disableStreaming && !pc.unwrapToolArgs && !pc.enableThinking) {
+  if (!pc.disableStreaming && !pc.unwrapToolArgs) {
     return null;
   }
   return pc;
