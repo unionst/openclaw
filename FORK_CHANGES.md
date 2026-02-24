@@ -176,7 +176,11 @@ Two changes:
 }
 ```
 
-4. **Typing Gate** — Pauses the debouncer and aborts active model runs when the
+4. **Bootstrap Expiry** — Stops injecting BOOTSTRAP.md into the system prompt
+   after a configurable number of user messages (`bootstrapExpiry`, default: 10).
+   Prevents wasted context when the agent fails to delete BOOTSTRAP.md after onboarding.
+
+5. **Typing Gate** — Pauses the debouncer and aborts active model runs when the
    user starts typing in iMessage, preventing the companion from talking over
    the user. Resumes when typing stops. On by default, configurable via
    `typingGate: false` per BlueBubbles account.
@@ -224,6 +228,29 @@ Added Zod validation for `typingGate` and `typingGateTimeoutMs`.
 ### `extensions/bluebubbles/src/monitor.test.ts`
 
 Added mock stubs for the three new `PluginRuntime.channel.session` methods.
+
+---
+
+## Bootstrap Expiry
+
+### `src/agents/bootstrap-files.ts`
+
+Added `resolveBootstrapExpiry(config)` and `countUserMessagesInSession(sessionFile, limit)`.
+The counter parses the session JSONL file and counts `{type: "message", message: {role: "user"}}`
+entries, stopping early once the limit is reached.
+
+### `src/agents/pi-embedded-runner/run/attempt.ts`
+
+After `resolveBootstrapContextForRun`, checks user message count against the expiry threshold.
+If exceeded, filters out `BOOTSTRAP.md` from both `bootstrapFiles` and `contextFiles`.
+
+### `src/config/types.agent-defaults.ts`
+
+Added `bootstrapExpiry?: number` to `AgentDefaultsConfig`.
+
+### `src/config/zod-schema.agent-defaults.ts`
+
+Added `bootstrapExpiry: z.number().int().nonnegative().optional()`.
 
 ---
 

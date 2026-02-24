@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import type { OpenClawConfig } from "../config/config.js";
 import { applyBootstrapHookOverrides } from "./bootstrap-hooks.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
@@ -11,6 +12,43 @@ import {
   loadWorkspaceBootstrapFiles,
   type WorkspaceBootstrapFile,
 } from "./workspace.js";
+
+const DEFAULT_BOOTSTRAP_EXPIRY = 10;
+
+export function resolveBootstrapExpiry(config?: OpenClawConfig): number {
+  const raw = config?.agents?.defaults?.bootstrapExpiry;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
+    return Math.floor(raw);
+  }
+  return DEFAULT_BOOTSTRAP_EXPIRY;
+}
+
+export async function countUserMessagesInSession(
+  sessionFile: string,
+  limit: number,
+): Promise<number> {
+  try {
+    const raw = await fs.readFile(sessionFile, "utf-8");
+    let count = 0;
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) {
+        continue;
+      }
+      try {
+        const record = JSON.parse(line);
+        if (record.type === "message" && record.message?.role === "user") {
+          count++;
+          if (count >= limit) {
+            return count;
+          }
+        }
+      } catch {}
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
 
 export function makeBootstrapWarn(params: {
   sessionLabel: string;

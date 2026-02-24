@@ -30,7 +30,12 @@ import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import { resolveOpenClawAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
-import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../../bootstrap-files.js";
+import {
+  countUserMessagesInSession,
+  makeBootstrapWarn,
+  resolveBootstrapContextForRun,
+  resolveBootstrapExpiry,
+} from "../../bootstrap-files.js";
 import { createCacheTrace } from "../../cache-trace.js";
 import {
   listChannelSupportedActions,
@@ -337,7 +342,7 @@ export async function runEmbeddedAttempt(
     });
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
-    const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
+    const { bootstrapFiles: rawBootstrapFiles, contextFiles: rawContextFiles } =
       await resolveBootstrapContextForRun({
         workspaceDir: effectiveWorkspace,
         config: params.config,
@@ -345,6 +350,20 @@ export async function runEmbeddedAttempt(
         sessionId: params.sessionId,
         warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
       });
+
+    const bootstrapExpiry = resolveBootstrapExpiry(params.config);
+    let hookAdjustedBootstrapFiles = rawBootstrapFiles;
+    let contextFiles = rawContextFiles;
+    if (bootstrapExpiry > 0) {
+      const userMsgCount = await countUserMessagesInSession(params.sessionFile, bootstrapExpiry);
+      if (userMsgCount >= bootstrapExpiry) {
+        hookAdjustedBootstrapFiles = rawBootstrapFiles.filter(
+          (f) => f.name !== DEFAULT_BOOTSTRAP_FILENAME,
+        );
+        contextFiles = rawContextFiles.filter((f) => !f.path.endsWith("BOOTSTRAP.md"));
+      }
+    }
+
     const workspaceNotes = hookAdjustedBootstrapFiles.some(
       (file) => file.name === DEFAULT_BOOTSTRAP_FILENAME && !file.missing,
     )
