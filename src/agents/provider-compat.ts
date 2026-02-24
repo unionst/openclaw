@@ -210,7 +210,7 @@ function unwrapToolCallArgs(toolCalls: OpenAIToolCall[] | undefined): OpenAITool
   });
 }
 
-// ── Thinking tag stripping ──────────────────────────────────────────────────
+// ── Text post-processing ────────────────────────────────────────────────────
 
 /**
  * Strip reasoning content that Hermes-style models emit before their actual
@@ -231,6 +231,50 @@ function stripThinkingBlock(text: string): string {
   return text.slice(closeIdx + "</think>".length).trim();
 }
 
+const TOOL_CALL_RE = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
+
+/**
+ * Extract `<tool_call>` blocks from text content. Hermes-style models
+ * sometimes emit tool calls as `<tool_call>{"name":...,"arguments":...}</tool_call>`
+ * in the text instead of structured `tool_calls`. This extracts them and
+ * returns the remaining text plus parsed tool calls.
+ */
+function extractInlineToolCalls(text: string): {
+  remainingText: string;
+  toolCalls: OpenAIToolCall[];
+} {
+  if (!text || !text.includes("<tool_call>")) {
+    return { remainingText: text, toolCalls: [] };
+  }
+
+  const toolCalls: OpenAIToolCall[] = [];
+  const remainingText = text
+    .replace(TOOL_CALL_RE, (_match, jsonStr: string) => {
+      try {
+        const parsed = JSON.parse(jsonStr.trim());
+        if (parsed.name) {
+          toolCalls.push({
+            id: `inline_call_${randomUUID()}`,
+            type: "function",
+            function: {
+              name: parsed.name,
+              arguments:
+                typeof parsed.arguments === "string"
+                  ? parsed.arguments
+                  : JSON.stringify(parsed.arguments ?? {}),
+            },
+          });
+        }
+      } catch {
+        log.warn(`Failed to parse inline <tool_call>: ${jsonStr.slice(0, 200)}`);
+      }
+      return "";
+    })
+    .trim();
+
+  return { remainingText, toolCalls };
+}
+
 // ── Response conversion ─────────────────────────────────────────────────────
 
 function buildAssistantMessage(
@@ -246,16 +290,17 @@ function buildAssistantMessage(
   const content: (TextContent | ToolCall)[] = [];
 
   const rawText = choice.message.content || "";
-  const text = stripThinkingBlock(rawText);
+  const afterThinking = stripThinkingBlock(rawText);
+  const { remainingText: text, toolCalls: inlineToolCalls } = extractInlineToolCalls(afterThinking);
   if (text) {
     content.push({ type: "text", text });
   }
 
-  let toolCalls = choice.message.tool_calls;
+  let toolCalls = [...(choice.message.tool_calls ?? []), ...inlineToolCalls];
   if (compat.unwrapToolArgs) {
-    toolCalls = unwrapToolCallArgs(toolCalls);
+    toolCalls = unwrapToolCallArgs(toolCalls) ?? [];
   }
-  if (toolCalls && toolCalls.length > 0) {
+  if (toolCalls.length > 0) {
     for (const tc of toolCalls) {
       let parsedArgs: Record<string, unknown> = {};
       try {

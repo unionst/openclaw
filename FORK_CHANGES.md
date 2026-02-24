@@ -35,12 +35,24 @@ Non-streaming StreamFn factory for quirky OpenAI-compatible providers (Nous Port
 - Converts OpenClaw message format to OpenAI chat format (system/user/assistant/tool)
 - Converts OpenAI responses back to OpenClaw's `AssistantMessage` format
 - Unwraps double-encoded tool call arguments (JSON string containing a JSON string)
+- Strips `<think>` reasoning blocks from response text (Hermes hybrid thinking mode)
+- Extracts `<tool_call>` XML blocks from text content and converts them to structured
+  tool calls (Hermes sometimes emits tool calls in its native XML format instead of
+  the OpenAI-compatible structured `tool_calls` field)
 - Emits the response as a single `done` event on the stream
 
 **Key exports:**
 
 - `createProviderCompatStreamFn(baseUrl, modelId, compat)` — Returns a `StreamFn`
 - `resolveProviderCompat(providerConfig)` — Reads compat config from provider
+
+**Text post-processing pipeline** (applied in `buildAssistantMessage`):
+
+1. `stripThinkingBlock` — Strips everything up to and including the last `</think>` tag.
+   Handles malformed variants where Hermes uses a wrong opening tag but closes with `</think>`.
+2. `extractInlineToolCalls` — Parses `<tool_call>{"name":...,"arguments":...}</tool_call>`
+   from text, converts to structured `OpenAIToolCall` objects, merges with any structured
+   `tool_calls` from the API response.
 
 **Activated by** `providerCompat.disableStreaming: true` in provider config.
 
