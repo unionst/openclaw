@@ -19,7 +19,6 @@ type OwnerIdDisplay = "raw" | "hash";
 
 function buildSkillsSection(params: {
   skillsPrompt?: string;
-  isMinimal: boolean;
   compact: boolean;
   readToolName: string;
 }) {
@@ -396,7 +395,6 @@ export function buildAgentSystemPrompt(params: {
       : "Treat this directory as the single global workspace for file operations unless explicitly instructed otherwise.";
   const skillsSection = buildSkillsSection({
     skillsPrompt,
-    isMinimal,
     compact,
     readToolName,
   });

@@ -45,6 +45,7 @@ const bluebubblesAccountSchema = z
     sendReadReceipts: z.boolean().optional(),
     typingGate: z.boolean().optional(),
     typingGateTimeoutMs: z.number().int().positive().optional(),
+    allowPrivateNetwork: z.boolean().optional(),
     blockStreaming: z.boolean().optional(),
     groups: z.object({}).catchall(bluebubblesGroupConfigSchema).optional(),
   })

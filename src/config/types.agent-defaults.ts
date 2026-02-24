@@ -255,6 +255,8 @@ export type AgentDefaultsConfig = {
     thinking?: string;
     /** Prompt mode for spawned sub-agents. Default: "minimal". */
     promptMode?: "full" | "minimal" | "none";
+    /** Default run timeout in seconds for spawned sub-agents (0 = no timeout). */
+    runTimeoutSeconds?: number;
     /**
      * How sub-agent completion results are delivered to the user.
      * - "direct": send the raw completion text directly (default, faster but no tool use)

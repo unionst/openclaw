@@ -151,6 +151,7 @@ export const AgentDefaultsSchema = z
           .union([z.literal("full"), z.literal("minimal"), z.literal("none")])
           .optional()
           .describe("Prompt mode for spawned sub-agents. Default: minimal."),
+        runTimeoutSeconds: z.number().int().min(0).optional(),
         announceDelivery: z
           .union([z.literal("direct"), z.literal("agent")])
           .optional()

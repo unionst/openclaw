@@ -57,6 +57,8 @@ export type BlueBubblesAccountConfig = {
   typingGate?: boolean;
   /** Safety timeout in ms before auto-resuming if no stop-typing event arrives (default: 60000). */
   typingGateTimeoutMs?: number;
+  /** Allow fetching from private/internal IP addresses (e.g. localhost). Required for same-host BlueBubbles setups. */
+  allowPrivateNetwork?: boolean;
   /** Per-group configuration keyed by chat GUID or identifier. */
   groups?: Record<string, BlueBubblesGroupConfig>;
 };
