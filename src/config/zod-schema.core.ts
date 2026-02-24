@@ -70,6 +70,7 @@ export const ModelProviderSchema = z
       .object({
         disableStreaming: z.boolean().optional(),
         unwrapToolArgs: z.boolean().optional(),
+        enableThinking: z.boolean().optional(),
       })
       .strict()
       .optional(),
