@@ -210,6 +210,27 @@ function unwrapToolCallArgs(toolCalls: OpenAIToolCall[] | undefined): OpenAITool
   });
 }
 
+// ── Thinking tag stripping ──────────────────────────────────────────────────
+
+/**
+ * Strip reasoning content that Hermes-style models emit before their actual
+ * response. Handles both well-formed `<think>...</think>` and malformed
+ * variants (e.g. `<tool_call>...</think>`) where the model hallucinates
+ * the opening tag but still closes with `</think>`.
+ */
+function stripThinkingBlock(text: string): string {
+  if (!text) {
+    return text;
+  }
+  // Fast path: no closing think tag means nothing to strip
+  const closeIdx = text.lastIndexOf("</think>");
+  if (closeIdx === -1) {
+    return text;
+  }
+  // Strip everything up to and including the last </think>
+  return text.slice(closeIdx + "</think>".length).trim();
+}
+
 // ── Response conversion ─────────────────────────────────────────────────────
 
 function buildAssistantMessage(
@@ -224,7 +245,8 @@ function buildAssistantMessage(
 
   const content: (TextContent | ToolCall)[] = [];
 
-  const text = choice.message.content || "";
+  const rawText = choice.message.content || "";
+  const text = stripThinkingBlock(rawText);
   if (text) {
     content.push({ type: "text", text });
   }
