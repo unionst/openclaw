@@ -47,6 +47,8 @@ export type ProviderCompatConfig = {
   disableStreaming?: boolean;
   /** Unwrap tool-call arguments that arrive as double-encoded JSON strings. */
   unwrapToolArgs?: boolean;
+  /** Pass `chat_template_kwargs: { thinking: true }` to enable vLLM reasoning mode. */
+  enableThinking?: boolean;
 };
 
 export type ModelProviderConfig = {

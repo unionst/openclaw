@@ -51,6 +51,7 @@ interface OpenAIChatResponse {
       role: "assistant";
       content: string | null;
       tool_calls?: OpenAIToolCall[];
+      reasoning_content?: string | null;
     };
     finish_reason: string;
   }>;
@@ -296,7 +297,11 @@ function buildAssistantMessage(
     content.push({ type: "text", text });
   }
 
-  let toolCalls = [...(choice.message.tool_calls ?? []), ...inlineToolCalls];
+  // vLLM thinking mode puts tool calls in reasoning_content as <tool_call> XML
+  const reasoningText = choice.message.reasoning_content || "";
+  const { toolCalls: reasoningToolCalls } = extractInlineToolCalls(reasoningText);
+
+  let toolCalls = [...(choice.message.tool_calls ?? []), ...inlineToolCalls, ...reasoningToolCalls];
   if (compat.unwrapToolArgs) {
     toolCalls = unwrapToolCallArgs(toolCalls) ?? [];
   }
@@ -387,6 +392,9 @@ export function createProviderCompatStreamFn(
         }
         if (typeof options?.maxTokens === "number") {
           body.max_tokens = options.maxTokens;
+        }
+        if (compat.enableThinking) {
+          body.chat_template_kwargs = { thinking: true };
         }
 
         const headers: Record<string, string> = {
@@ -480,7 +488,7 @@ export function resolveProviderCompat(
     return null;
   }
   const pc = providerConfig.providerCompat;
-  if (!pc.disableStreaming && !pc.unwrapToolArgs) {
+  if (!pc.disableStreaming && !pc.unwrapToolArgs && !pc.enableThinking) {
     return null;
   }
   return pc;
