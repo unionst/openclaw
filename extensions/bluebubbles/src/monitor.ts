@@ -136,6 +136,9 @@ type TypingGateState = {
   timeouts: Map<string, ReturnType<typeof setTimeout>>;
 };
 
+// Last flushed message per chat — re-enqueued into debouncer on typing-gate abort so it coalesces with new messages.
+const lastFlushedMessages = new Map<string, { message: NormalizedWebhookMessage; target: WebhookTarget }>();
+
 const typingGateState = new Map<string, TypingGateState>();
 
 function getOrCreateTypingGateState(accountId: string): TypingGateState {
@@ -171,7 +174,7 @@ function resolvePeerIdFromChatGuid(chatGuid: string): { kind: "group" | "direct"
   return { kind: "direct", id: handle };
 }
 
-function abortActiveRunForChat(target: WebhookTarget, chatGuid: string): void {
+function abortActiveRunForChat(target: WebhookTarget, chatGuid: string): boolean {
   const { account, config, core, runtime } = target;
   const peer = resolvePeerIdFromChatGuid(chatGuid);
 
@@ -214,6 +217,21 @@ function abortActiveRunForChat(target: WebhookTarget, chatGuid: string): void {
       accountId: account.accountId,
     }).catch(() => {});
   }
+
+  // Re-enqueue the last flushed message so it coalesces with any new messages while paused
+  if (didAbort) {
+    const lastFlushed = lastFlushedMessages.get(chatGuid);
+    if (lastFlushed) {
+      lastFlushedMessages.delete(chatGuid);
+      const debouncer = targetDebouncers.get(target);
+      if (debouncer) {
+        logVerbose(core, runtime, `typing-gate: re-enqueued last message for ${chatGuid}`);
+        void debouncer.enqueue({ message: lastFlushed.message, target: lastFlushed.target });
+      }
+    }
+  }
+
+  return didAbort;
 }
 
 function handleTypingIndicator(params: {
@@ -319,25 +337,27 @@ function getOrCreateDebouncer(target: WebhookTarget) {
 
       // Use target from first entry (all entries have same target due to key structure)
       const flushTarget = entries[0].target;
+      let finalMessage: NormalizedWebhookMessage;
 
       if (entries.length === 1) {
-        // Single message - process normally
-        await processMessage(entries[0].message, flushTarget);
-        return;
+        finalMessage = entries[0].message;
+      } else {
+        finalMessage = combineDebounceEntries(entries);
+        if (core.logging.shouldLogVerbose()) {
+          const count = entries.length;
+          const preview = finalMessage.text.slice(0, 50);
+          runtime.log?.(
+            `[bluebubbles] coalesced ${count} messages: "${preview}${finalMessage.text.length > 50 ? "..." : ""}"`,
+          );
+        }
       }
 
-      // Multiple messages - combine and process
-      const combined = combineDebounceEntries(entries);
-
-      if (core.logging.shouldLogVerbose()) {
-        const count = entries.length;
-        const preview = combined.text.slice(0, 50);
-        runtime.log?.(
-          `[bluebubbles] coalesced ${count} messages: "${preview}${combined.text.length > 50 ? "..." : ""}"`,
-        );
+      const chatGuid = finalMessage.chatGuid?.trim();
+      if (chatGuid && !finalMessage.fromMe) {
+        lastFlushedMessages.set(chatGuid, { message: finalMessage, target: flushTarget });
       }
 
-      await processMessage(combined, flushTarget);
+      await processMessage(finalMessage, flushTarget);
     },
     onError: (err) => {
       runtime.error?.(`[${account.accountId}] [bluebubbles] debounce flush failed: ${String(err)}`);

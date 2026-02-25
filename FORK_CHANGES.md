@@ -222,7 +222,13 @@ Exposed three functions on `PluginRuntime.channel.session`:
 - Added typing indicator webhook handler with inline auth resolution
 - Added `handleTypingIndicator()` — pause/resume debouncer + abort active runs
 - Added `abortActiveRunForChat()` — resolves session key from chatGuid, looks up
-  session store, calls `abortEmbeddedPiRun` + `clearSessionQueues`
+  session store, calls `abortEmbeddedPiRun` + `clearSessionQueues`. On abort,
+  re-enqueues the last flushed message into the debouncer so it coalesces with
+  any new messages sent while the user is typing.
+- Added `lastFlushedMessages` map — `onFlush` stores the final coalesced message
+  per chat. When a run is aborted, the message is pushed back into the debouncer
+  buffer (paused), so it merges with subsequent messages and the agent responds
+  to everything holistically when the typing gate lifts.
 - Added `isPaused` callback to `getOrCreateDebouncer()` that checks per-account
   paused chat state
 - Respects `typingGate` (default: true) and `typingGateTimeoutMs` (default: 60s)
