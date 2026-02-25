@@ -190,9 +190,10 @@ function abortActiveRunForChat(target: WebhookTarget, chatGuid: string): void {
   const entry = store[sessionKey];
   const sessionId = entry?.sessionId;
 
+  let didAbort = false;
   if (sessionId) {
-    const aborted = core.channel.session.abortEmbeddedPiRun(sessionId);
-    if (aborted) {
+    didAbort = core.channel.session.abortEmbeddedPiRun(sessionId);
+    if (didAbort) {
       logVerbose(core, runtime, `typing-gate: aborted run for session=${sessionId}`);
     }
   }
@@ -206,10 +207,13 @@ function abortActiveRunForChat(target: WebhookTarget, chatGuid: string): void {
     );
   }
 
-  sendBlueBubblesTyping(chatGuid, false, {
-    cfg: config,
-    accountId: account.accountId,
-  }).catch(() => {});
+  // Spurious DELETE when not typing triggers phantom typing indicator on macOS 26
+  if (didAbort || cleared.followupCleared > 0 || cleared.laneCleared > 0) {
+    sendBlueBubblesTyping(chatGuid, false, {
+      cfg: config,
+      accountId: account.accountId,
+    }).catch(() => {});
+  }
 }
 
 function handleTypingIndicator(params: {
