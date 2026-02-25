@@ -39,6 +39,7 @@ import type {
   BlueBubblesRuntimeEnv,
   WebhookTarget,
 } from "./monitor-shared.js";
+import { isChatPaused } from "./monitor.js";
 import { isBlueBubblesPrivateApiEnabled } from "./probe.js";
 import { normalizeBlueBubblesReactionInput, sendBlueBubblesReaction } from "./reactions.js";
 import { resolveChatGuidForTarget, sendMessageBlueBubbles } from "./send.js";
@@ -1173,6 +1174,9 @@ export async function processMessage(
       dispatcherOptions: {
         ...prefixOptions,
         deliver: async (payload, info) => {
+          if (isChatPaused(account.accountId, chatGuid)) {
+            return;
+          }
           const rawReplyToId =
             privateApiEnabled && typeof payload.replyToId === "string"
               ? payload.replyToId.trim()

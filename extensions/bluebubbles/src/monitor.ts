@@ -148,7 +148,7 @@ function getOrCreateTypingGateState(accountId: string): TypingGateState {
   return state;
 }
 
-function isChatPaused(accountId: string, key: string): boolean {
+export function isChatPaused(accountId: string, key: string): boolean {
   const state = typingGateState.get(accountId);
   if (!state) {
     return false;
