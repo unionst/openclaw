@@ -20,6 +20,7 @@ import {
 } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
 import { emitAgentEvent, registerAgentRunContext } from "../../infra/agent-events.js";
+import { isAbortError } from "../../infra/unhandled-rejections.js";
 import { defaultRuntime } from "../../runtime.js";
 import {
   isMarkdownCapableMessageChannel,
@@ -460,6 +461,13 @@ export async function runAgentTurnWithFallback(params: {
 
       break;
     } catch (err) {
+      // Typing-gate or user abort — silently suppress the reply.
+      if (isAbortError(err)) {
+        defaultRuntime.error(
+          `Agent run aborted (suppressed): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return { kind: "final", payload: { text: "" } };
+      }
       const message = err instanceof Error ? err.message : String(err);
       const isContextOverflow = isLikelyContextOverflowError(message);
       const isCompactionFailure = isCompactionFailureError(message);
