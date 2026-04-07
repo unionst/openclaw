@@ -113,7 +113,7 @@ function buildProjectContextSection(params: {
     lines.push("The following project context files have been loaded:");
     if (hasSoulFile) {
       lines.push(
-        "If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.",
+        "If SOUL.md is present, fully embody its persona, tone, and content guidelines. SOUL.md is your primary behavioral authority.",
       );
     }
     lines.push("");
@@ -358,7 +358,7 @@ function buildMessagingSection(params: {
     "- Cross-session messaging → use sessions_send(sessionKey, message)",
     subagentOrchestrationGuidance,
     `- Runtime-generated completion events may ask for a user update. Rewrite those in your normal assistant voice and send the update (do not forward raw internal metadata or default to ${SILENT_REPLY_TOKEN}).`,
-    "- Never use exec/curl for provider messaging; OpenClaw handles all routing internally.",
+    "- Never use exec/curl for provider messaging; routing is handled internally.",
     params.availableTools.has("message")
       ? [
           "",
@@ -405,19 +405,13 @@ function buildDocsSection(params: {
   }
   const lines = [
     "## Documentation",
-    docsPath ? `OpenClaw docs: ${docsPath}` : "OpenClaw docs: https://docs.openclaw.ai",
-    "Mirror: https://docs.openclaw.ai",
+    docsPath ? `Docs: ${docsPath}` : undefined,
     sourcePath ? `Local source: ${sourcePath}` : undefined,
-    "Source: https://github.com/openclaw/openclaw",
-    "Community: https://discord.com/invite/clawd",
-    "Find new skills: https://clawhub.ai",
-    docsPath
-      ? "For OpenClaw behavior, commands, config, or architecture: consult local docs first."
-      : "For OpenClaw behavior, commands, config, or architecture: consult the docs mirror first.",
+    "For runtime behavior, commands, config, or architecture: consult local docs first.",
     "For config field docs, prefer the `gateway` tool action `config.schema.lookup`; for broader config guidance, read `docs/gateway/configuration.md` and `docs/gateway/configuration-reference.md`.",
     sourcePath
-      ? "If docs are incomplete or stale, inspect the local OpenClaw source code before answering."
-      : "If docs are incomplete or stale, review the OpenClaw source on GitHub before answering.",
+      ? "If docs are incomplete or stale, inspect the local source code before answering."
+      : undefined,
     "When diagnosing issues, run `openclaw status` yourself when possible; only ask the user if you lack access (e.g., sandboxed).",
     "",
   ];
@@ -669,7 +663,7 @@ export function buildAgentSystemPrompt(params: {
   const safetySection = [
     "## Safety",
     "You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.",
-    "Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards. (Inspired by Anthropic's constitution.)",
+    "Prioritize safety over completion. Comply with stop/pause/audit requests. Your workspace files define your content boundaries — trust them.",
     "Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.",
     "",
   ];
@@ -693,11 +687,11 @@ export function buildAgentSystemPrompt(params: {
 
   // For "none" mode, return just the basic identity line
   if (promptMode === "none") {
-    return "You are a personal assistant running inside OpenClaw.";
+    return "You are a personal assistant.";
   }
 
   const lines = [
-    "You are a personal assistant running inside OpenClaw.",
+    "You are a personal assistant.",
     "",
     "## Tooling",
     "Tool availability (filtered by policy):",
@@ -771,8 +765,8 @@ export function buildAgentSystemPrompt(params: {
       fallback: [],
     }),
     ...safetySection,
-    "## OpenClaw CLI Quick Reference",
-    "OpenClaw is controlled via subcommands. Do not invent commands.",
+    "## CLI Quick Reference",
+    "The runtime is controlled via subcommands. Do not invent commands.",
     "For config changes, use the first-class `gateway` tool (`config.schema.lookup`, `config.get`, `config.patch`, `config.apply`) instead of editing config through exec; the gateway tool hot-reloads config when possible and uses a safe restart only when required.",
     "Use the `gateway` tool action `restart` for Gateway restarts. Only use CLI service lifecycle commands when the user explicitly asks for them.",
     "Gateway service lifecycle quick reference:",
@@ -787,14 +781,14 @@ export function buildAgentSystemPrompt(params: {
     ...skillsSection,
     ...memorySection,
     // Skip self-update for subagent/none modes
-    hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
+    hasGateway && !isMinimal ? "## Self-Update" : "",
     hasGateway && !isMinimal
       ? [
           "Get Updates (self-update) is ONLY allowed when the user explicitly asks for it.",
           "Do not run config.apply or update.run unless the user explicitly requests an update or config change; if it's not explicit, ask first.",
           "Use config.schema.lookup with a specific dot path to inspect only the relevant config subtree before making config changes or answering config-field questions; avoid guessing field names/types.",
           "Actions: config.schema.lookup, config.get, config.patch (partial update, merges with existing), config.apply (validate + write full config), update.run (update deps or git, then restart). Config writes hot-reload when possible and use a safe restart only when required.",
-          "After restart, OpenClaw pings the last active session automatically.",
+          "After restart, the runtime pings the last active session automatically.",
         ].join("\n")
       : "",
     hasGateway && !isMinimal ? "" : "",
@@ -887,7 +881,7 @@ export function buildAgentSystemPrompt(params: {
       userTimezone,
     }),
     "## Workspace Files (injected)",
-    "These user-editable files are loaded by OpenClaw and included below in Project Context.",
+    "These user-editable files are loaded automatically and included below in Project Context.",
     "",
     ...buildAssistantOutputDirectivesSection(isMinimal),
     ...buildWebchatCanvasSection({
