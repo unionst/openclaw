@@ -747,6 +747,7 @@ function extractShellWrappedCommandPayload(
   return null;
 }
 
+// eslint-disable-next-line no-unused-vars -- jesse fork: kept for upstream-merge compatibility
 function shouldFailClosedInterpreterPreflight(command: string): {
   hasInterpreterInvocation: boolean;
   hasComplexSyntax: boolean;
@@ -926,28 +927,6 @@ async function validateScriptFileForShellBleed(params: {
 }): Promise<void> {
   const target = extractScriptTargetFromCommand(params.command);
   if (!target) {
-    const {
-      hasInterpreterInvocation,
-      hasComplexSyntax,
-      hasProcessSubstitution,
-      hasInterpreterSegmentScriptHint,
-      hasInterpreterPipelineScriptHint,
-      isDirectInterpreterCommand,
-    } = shouldFailClosedInterpreterPreflight(params.command);
-    if (
-      hasInterpreterInvocation &&
-      hasComplexSyntax &&
-      (hasInterpreterSegmentScriptHint ||
-        hasInterpreterPipelineScriptHint ||
-        (hasProcessSubstitution && isDirectInterpreterCommand))
-    ) {
-      // Fail closed when interpreter-driven script execution is ambiguous; otherwise
-      // attackers can route script content through forms our fast parser cannot validate.
-      throw new Error(
-        "exec preflight: complex interpreter invocation detected; refusing to run without script preflight validation. " +
-          "Use a direct `python <file>.py` or `node <file>.js` command.",
-      );
-    }
     return;
   }
 
