@@ -95,6 +95,7 @@ const bluebubblesAccountSchema = z
     blockStreaming: z.boolean().optional(),
     groups: z.object({}).catchall(bluebubblesGroupConfigSchema).optional(),
     coalesceSameSenderDms: z.boolean().optional(),
+    allowAgentIdOverride: z.array(z.string()).optional(),
   })
   .superRefine((value, ctx) => {
     const serverUrl = value.serverUrl?.trim() ?? "";
