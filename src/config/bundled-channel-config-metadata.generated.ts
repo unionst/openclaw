@@ -281,6 +281,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
             additionalProperties: false,
           },
         },
+        allowAgentIdOverride: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+        },
         accounts: {
           type: "object",
           properties: {},
@@ -556,6 +562,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
                     },
                   },
                   additionalProperties: false,
+                },
+              },
+              allowAgentIdOverride: {
+                type: "array",
+                items: {
+                  type: "string",
                 },
               },
             },
