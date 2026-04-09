@@ -617,6 +617,7 @@ type InboundDedupeDeliverySignal = { deliveryFailed: boolean };
 export async function processMessage(
   message: NormalizedWebhookMessage,
   target: WebhookTarget,
+  options: { agentIdOverride?: string | null } = {},
 ): Promise<void> {
   const { account, core, runtime } = target;
 
@@ -1008,6 +1009,7 @@ async function processMessageAfterDedupe(
     chatId,
     chatGuid,
     chatIdentifier,
+    agentIdOverride: options.agentIdOverride,
   });
   const contextVisibilityMode = resolveChannelContextVisibilityMode({
     cfg: config,

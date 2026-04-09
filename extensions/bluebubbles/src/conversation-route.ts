@@ -3,7 +3,11 @@ import {
   resolveConfiguredBindingRoute,
   resolveRuntimeConversationBindingRoute,
 } from "openclaw/plugin-sdk/conversation-runtime";
-import { resolveAgentRoute } from "openclaw/plugin-sdk/routing";
+import {
+  buildAgentPeerSessionKey,
+  deriveLastRoutePolicy,
+  resolveAgentRoute,
+} from "openclaw/plugin-sdk/routing";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { resolveBlueBubblesInboundConversationId } from "./conversation-id.js";
 
@@ -16,6 +20,7 @@ export function resolveBlueBubblesConversationRoute(params: {
   chatId?: number | null;
   chatGuid?: string | null;
   chatIdentifier?: string | null;
+  agentIdOverride?: string | null;
 }): ReturnType<typeof resolveAgentRoute> {
   let route = resolveAgentRoute({
     cfg: params.cfg,
@@ -26,6 +31,40 @@ export function resolveBlueBubblesConversationRoute(params: {
       id: params.peerId,
     },
   });
+
+  if (params.agentIdOverride) {
+    const bbCfg = (
+      params.cfg.channels as { bluebubbles?: { allowAgentIdOverride?: string[] } } | undefined
+    )?.bluebubbles;
+    const allowList = bbCfg?.allowAgentIdOverride ?? [];
+    if (allowList.includes(params.agentIdOverride)) {
+      const overriddenSessionKey = buildAgentPeerSessionKey({
+        agentId: params.agentIdOverride,
+        mainKey: params.cfg.session?.mainKey,
+        channel: "bluebubbles",
+        accountId: params.accountId,
+        peerKind: params.isGroup ? "group" : "direct",
+        peerId: params.peerId,
+        identityLinks: params.cfg.session?.identityLinks,
+        dmScope: params.cfg.session?.dmScope,
+      });
+      logVerbose(
+        `bluebubbles: agent override -> ${params.agentIdOverride} (sessionKey=${overriddenSessionKey})`,
+      );
+      return {
+        ...route,
+        agentId: params.agentIdOverride,
+        sessionKey: overriddenSessionKey,
+        lastRoutePolicy: deriveLastRoutePolicy({
+          sessionKey: overriddenSessionKey,
+          mainSessionKey: route.mainSessionKey,
+        }),
+      };
+    }
+    logVerbose(
+      `bluebubbles: agent override rejected (not in allowList): ${params.agentIdOverride}`,
+    );
+  }
 
   const conversationId = resolveBlueBubblesInboundConversationId({
     isGroup: params.isGroup,

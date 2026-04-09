@@ -9,6 +9,7 @@ export {
 } from "../routing/resolve-route.js";
 export {
   buildAgentMainSessionKey,
+  buildAgentPeerSessionKey,
   DEFAULT_ACCOUNT_ID,
   DEFAULT_MAIN_KEY,
   buildGroupHistoryKey,

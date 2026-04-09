@@ -60,4 +60,50 @@ describe("resolveBlueBubblesConversationRoute", () => {
     expect(route.matchedBy).toBe("binding.channel");
     expect(touch).toHaveBeenCalledWith("default:+15555550123", undefined);
   });
+
+  it("honors ?agentId= override when allowlisted (fork: jesse dynamic routing)", () => {
+    const cfg = {
+      ...baseCfg,
+      session: { mainKey: "main", dmScope: "per-peer" as const },
+      agents: { list: [{ id: "main" }, { id: "jesse" }, { id: "jesse-gate" }] },
+      channels: {
+        bluebubbles: {
+          allowAgentIdOverride: ["jesse", "jesse-gate"],
+        },
+      },
+    } as unknown as OpenClawConfig;
+
+    const route = resolveBlueBubblesConversationRoute({
+      cfg,
+      accountId: "default",
+      isGroup: false,
+      peerId: "+16198760251",
+      sender: "+16198760251",
+      agentIdOverride: "jesse",
+    });
+
+    expect(route.agentId).toBe("jesse");
+    expect(route.sessionKey).toBe("agent:jesse:direct:+16198760251");
+  });
+
+  it("rejects ?agentId= override when not allowlisted", () => {
+    const cfg = {
+      ...baseCfg,
+      session: { mainKey: "main", dmScope: "per-peer" as const },
+      agents: { list: [{ id: "main" }, { id: "jesse" }] },
+      channels: { bluebubbles: { allowAgentIdOverride: ["jesse"] } },
+    } as unknown as OpenClawConfig;
+
+    const route = resolveBlueBubblesConversationRoute({
+      cfg,
+      accountId: "default",
+      isGroup: false,
+      peerId: "+16198760251",
+      sender: "+16198760251",
+      agentIdOverride: "sneaky-other-agent",
+    });
+
+    // Falls through to the normal routing (default "main") since override was rejected
+    expect(route.agentId).toBe("main");
+  });
 });
