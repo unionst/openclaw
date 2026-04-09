@@ -1,4 +1,5 @@
 import type { DmPolicy, GroupPolicy } from "openclaw/plugin-sdk/setup";
+import { fetchWithRuntimeDispatcher } from "openclaw/plugin-sdk/infra-runtime";
 import { fetchWithSsrFGuard, type SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
 
 export type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
@@ -177,8 +178,12 @@ export async function blueBubblesFetchWithTimeout(
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // undici 8.0 compat: when init has a dispatcher (injected by core SSRF guard), route through
+  // fetchWithRuntimeDispatcher so it doesn't leak into globalThis.fetch. See Slack fix e8fb140642.
+  const fetchImpl =
+    init != null && "dispatcher" in init ? fetchWithRuntimeDispatcher : fetch;
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetchImpl(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }

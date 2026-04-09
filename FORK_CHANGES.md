@@ -123,6 +123,32 @@ Line 139 (`'`agents_list`and`subagents` apply to OpenClaw sub-agents...'`) is NO
 
 ---
 
+## extensions/bluebubbles/src/types.ts — undici 8.0 compat fix
+
+**Upstream bug**: BB attachment downloads fail with `Error: invalid onRequestStart method` because `blueBubblesFetchWithTimeout` calls plain `fetch(url, init)` even when `init` has a `dispatcher` injected by core's SSRF guard. On undici 8.0 the dispatcher leaks into `globalThis.fetch`'s handler chain, which has an incompatible interceptor shape, and every BB image/video download throws.
+
+**Fix**: route through `fetchWithRuntimeDispatcher` from `openclaw/plugin-sdk/infra-runtime` when `init.dispatcher` is set, otherwise use plain `fetch`. Same pattern as the upstream Slack fix in commit `e8fb140642` (`fix: preserve Slack guarded media transport`) — that fix wasn't applied to the bluebubbles plugin.
+
+Added import:
+
+```ts
+import { fetchWithRuntimeDispatcher } from "openclaw/plugin-sdk/infra-runtime";
+```
+
+Modified plain-fetch branch of `blueBubblesFetchWithTimeout`:
+
+```ts
+const fetchImpl =
+  init != null && "dispatcher" in init ? fetchWithRuntimeDispatcher : fetch;
+try {
+  return await fetchImpl(url, { ...init, signal: controller.signal });
+} finally { ... }
+```
+
+When upstream lands a proper bluebubbles equivalent of `e8fb140642`, drop this section.
+
+---
+
 ## Test files updated to match source changes
 
 These test files have assertions that pin the exact prompt strings. They're updated whenever a prompt above changes; they're not new fork features.
