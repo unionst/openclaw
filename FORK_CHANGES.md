@@ -149,6 +149,25 @@ When upstream lands a proper bluebubbles equivalent of `e8fb140642`, drop this s
 
 ---
 
+## extensions/bluebubbles — `?agentId=` query param override
+
+Enables per-request dynamic agent routing for the BB channel without maintaining file-based `bindings[]` rewrites. This fork adds an `?agentId=<name>` query parameter to `/bluebubbles-webhook` that, when set and allowlisted in config, overrides the normal route resolution for that message.
+
+Files touched:
+
+- `src/plugin-sdk/routing.ts` — export `buildAgentPeerSessionKey` so extensions can synthesize session keys
+- `extensions/bluebubbles/src/conversation-route.ts` — accept optional `agentIdOverride`; when allowlisted, build the route directly via `buildAgentPeerSessionKey` bypassing `bindings[]` lookup
+- `extensions/bluebubbles/src/monitor.ts` — extract `?agentId=` from the webhook URL and thread through `debouncer.enqueue`
+- `extensions/bluebubbles/src/monitor-debounce.ts` — `BlueBubblesDebounceEntry` carries `agentIdOverride`; debouncer forwards it to `processMessage`
+- `extensions/bluebubbles/src/monitor-processing.ts` — `processMessage` accepts `options.agentIdOverride` and passes it to `resolveBlueBubblesConversationRoute`
+- `extensions/bluebubbles/src/conversation-route.test.ts` — two tests covering allowlisted override + rejection of non-allowlisted override
+
+Config schema: `channels.bluebubbles.allowAgentIdOverride: string[]`. Only agents in this allowlist can be targeted via the query param. Not in this allowlist = override silently ignored, normal routing applies.
+
+No upstream equivalent. Revert via `git revert` if the entire dynamic-routing feature is retired.
+
+---
+
 ## Test files updated to match source changes
 
 These test files have assertions that pin the exact prompt strings. They're updated whenever a prompt above changes; they're not new fork features.

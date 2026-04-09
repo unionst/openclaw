@@ -584,6 +584,7 @@ function buildInboundHistorySnapshot(params: {
 export async function processMessage(
   message: NormalizedWebhookMessage,
   target: WebhookTarget,
+  options: { agentIdOverride?: string | null } = {},
 ): Promise<void> {
   const { account, config, runtime, core, statusSink } = target;
   const pairing = createChannelPairingController({
@@ -846,6 +847,7 @@ export async function processMessage(
     chatId,
     chatGuid,
     chatIdentifier,
+    agentIdOverride: options.agentIdOverride,
   });
   const contextVisibilityMode = resolveChannelContextVisibilityMode({
     cfg: config,

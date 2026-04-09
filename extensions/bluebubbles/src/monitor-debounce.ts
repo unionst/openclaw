@@ -10,6 +10,7 @@ import type { OpenClawConfig } from "./runtime-api.js";
 type BlueBubblesDebounceEntry = {
   message: NormalizedWebhookMessage;
   target: WebhookTarget;
+  agentIdOverride?: string | null;
 };
 
 function normalizeDebounceMessageText(text: unknown): string {
@@ -124,7 +125,11 @@ function resolveBlueBubblesDebounceMs(
 }
 
 export function createBlueBubblesDebounceRegistry(params: {
-  processMessage: (message: NormalizedWebhookMessage, target: WebhookTarget) => Promise<void>;
+  processMessage: (
+    message: NormalizedWebhookMessage,
+    target: WebhookTarget,
+    options?: { agentIdOverride?: string | null },
+  ) => Promise<void>;
 }): BlueBubblesDebounceRegistry {
   const targetDebouncers = new Map<WebhookTarget, BlueBubblesDebouncer>();
 
@@ -185,13 +190,16 @@ export function createBlueBubblesDebounceRegistry(params: {
           // Use target from first entry (all entries have same target due to key structure)
           const flushTarget = entries[0].target;
 
+          const flushAgentIdOverride =
+            entries.find((e) => e.agentIdOverride)?.agentIdOverride ?? null;
+
           if (entries.length === 1) {
-            // Single message - process normally
-            await params.processMessage(entries[0].message, flushTarget);
+            await params.processMessage(entries[0].message, flushTarget, {
+              agentIdOverride: flushAgentIdOverride,
+            });
             return;
           }
 
-          // Multiple messages - combine and process
           const combined = combineDebounceEntries(entries);
 
           if (core.logging.shouldLogVerbose()) {
@@ -202,7 +210,9 @@ export function createBlueBubblesDebounceRegistry(params: {
             );
           }
 
-          await params.processMessage(combined, flushTarget);
+          await params.processMessage(combined, flushTarget, {
+            agentIdOverride: flushAgentIdOverride,
+          });
         },
         onError: (err) => {
           runtime.error?.(

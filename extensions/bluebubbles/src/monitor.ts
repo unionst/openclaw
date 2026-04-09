@@ -182,6 +182,7 @@ export async function handleBlueBubblesWebhookRequest(
     inFlightKey: `${normalizedPath}:${clientIp}`,
     handle: async ({ path, targets }) => {
       const url = requestUrl;
+      const agentIdOverride = url.searchParams.get("agentId");
       const guidParam = url.searchParams.get("guid") ?? url.searchParams.get("password");
       const headerToken =
         req.headers["x-guid"] ??
@@ -284,7 +285,7 @@ export async function handleBlueBubblesWebhookRequest(
         // Route messages through debouncer to coalesce rapid-fire events
         // (e.g., text message + URL balloon arriving as separate webhooks)
         const debouncer = debounceRegistry.getOrCreateDebouncer(target);
-        debouncer.enqueue({ message, target }).catch((err) => {
+        debouncer.enqueue({ message, target, agentIdOverride }).catch((err) => {
           target.runtime.error?.(
             `[${target.account.accountId}] BlueBubbles webhook failed: ${String(err)}`,
           );
