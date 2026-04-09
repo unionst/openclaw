@@ -64,6 +64,7 @@ const bluebubblesAccountSchema = z
     network: bluebubblesNetworkSchema,
     blockStreaming: z.boolean().optional(),
     groups: z.object({}).catchall(bluebubblesGroupConfigSchema).optional(),
+    allowAgentIdOverride: z.array(z.string()).optional(),
   })
   .superRefine((value, ctx) => {
     const serverUrl = value.serverUrl?.trim() ?? "";
