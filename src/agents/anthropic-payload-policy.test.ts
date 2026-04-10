@@ -197,6 +197,34 @@ describe("anthropic payload policy", () => {
     ]);
   });
 
+  it("applies 1h TTL when baseUrl is undefined (SDK default = api.anthropic.com)", () => {
+    const policy = resolveAnthropicPayloadPolicy({
+      provider: "anthropic",
+      api: "anthropic-messages",
+      baseUrl: undefined,
+      cacheRetention: "long",
+      enableCacheControl: true,
+    });
+    const payload: TestPayload = {
+      system: [{ type: "text", text: "Follow policy." }],
+      messages: [{ role: "user", content: "Hello" }],
+    };
+
+    applyAnthropicPayloadPolicyToParams(payload, policy);
+
+    expect(payload.system).toEqual([
+      {
+        type: "text",
+        text: "Follow policy.",
+        cache_control: { type: "ephemeral", ttl: "1h" },
+      },
+    ]);
+    expect(payload.messages[0]).toEqual({
+      role: "user",
+      content: [{ type: "text", text: "Hello", cache_control: { type: "ephemeral", ttl: "1h" } }],
+    });
+  });
+
   it("strips the boundary even when cache retention is disabled", () => {
     const policy = resolveAnthropicPayloadPolicy({
       provider: "anthropic",
