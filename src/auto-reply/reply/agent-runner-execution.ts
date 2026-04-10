@@ -1696,6 +1696,18 @@ export async function runAgentTurnWithFallback(params: {
       }
 
       defaultRuntime.error(`Embedded agent failed before reply: ${message}`);
+
+      if (
+        params.followupRun.run.config.agents?.defaults?.fallbackPersist === false &&
+        isFallbackSummaryError(err)
+      ) {
+        const entry = params.getActiveSessionEntry();
+        if (entry) {
+          delete entry.modelOverride;
+          delete entry.providerOverride;
+        }
+      }
+
       // Only classify as rate-limit when we have concrete evidence from the
       // underlying error. FallbackSummaryError messages embed per-attempt
       // reason labels like `(rate_limit)`, so string-matching the summary text
