@@ -277,6 +277,12 @@ export type AgentDefaultsConfig = {
   cliBackends?: Record<string, CliBackendConfig>;
   /** Opt-in: prune old tool results from the LLM context to reduce token usage. */
   contextPruning?: AgentContextPruningConfig;
+  /**
+   * Whether to persist fallback model/provider overrides to the session store
+   * after a successful fallback. When false, each turn starts fresh with the
+   * primary model. Default: true (upstream behavior preserved).
+   */
+  fallbackPersist?: boolean;
   /** Compaction tuning and pre-compaction memory flush behavior. */
   compaction?: AgentCompactionConfig;
   /** Embedded Pi runner hardening and compatibility controls. */
