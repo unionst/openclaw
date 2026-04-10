@@ -191,6 +191,24 @@ When upstream lands the same fix (or rejects it explicitly), drop this section.
 
 ---
 
+## Sticky model fallback — `agents.defaults.fallbackPersist`
+
+When a primary model (e.g. opus) times out and the fallback chain selects a different model for the turn, upstream persists `modelOverride` and `providerOverride` to the session entry in `sessions.json`. This causes all subsequent turns to skip the primary model entirely.
+
+**New config flag**: `agents.defaults.fallbackPersist` (boolean, default: `true`).
+
+When set to `false`, after a fallback model completes a turn successfully, the persisted override is rolled back so the next turn starts fresh with the configured primary model. The per-turn fallback chain is unaffected.
+
+Files touched:
+
+- `src/config/types.agent-defaults.ts` — added `fallbackPersist?: boolean` to `AgentDefaultsConfig`
+- `src/config/zod-schema.agent-defaults.ts` — added `fallbackPersist: z.boolean().optional()` to the Zod schema
+- `src/auto-reply/reply/agent-runner-execution.ts` — hoisted `lastSuccessfulFallbackRollback` closure from the `run` callback; after `runWithModelFallback` succeeds, calls the rollback when `fallbackPersist === false` and the winning model differs from the primary
+
+No upstream equivalent. Safe to drop on merge since `true` (default) preserves upstream behavior.
+
+---
+
 ## Test files updated to match source changes
 
 These test files have assertions that pin the exact prompt strings. They're updated whenever a prompt above changes; they're not new fork features.

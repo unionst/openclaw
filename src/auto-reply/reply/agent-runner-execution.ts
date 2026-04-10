@@ -799,6 +799,9 @@ export async function runAgentTurnWithFallback(params: {
           })
         : undefined;
       const onToolResult = params.opts?.onToolResult;
+      // Capture the last successful rollback closure so we can undo fallback
+      // persistence after the run completes when fallbackPersist is disabled.
+      let lastSuccessfulFallbackRollback: (() => Promise<void>) | undefined;
       const fallbackResult = await runWithModelFallback({
         ...resolveModelFallbackOptions(params.followupRun.run),
         runId,
@@ -903,6 +906,7 @@ export async function runAgentTurnWithFallback(params: {
                 });
                 lifecycleTerminalEmitted = true;
 
+                lastSuccessfulFallbackRollback = rollbackFallbackCandidateSelection;
                 return result;
               } catch (err) {
                 if (rollbackFallbackCandidateSelection) {
@@ -1218,6 +1222,7 @@ export async function runAgentTurnWithFallback(params: {
                 result.meta?.agentMeta?.compactionCount ?? 0,
               );
               attemptCompactionCount = Math.max(attemptCompactionCount, resultCompactionCount);
+              lastSuccessfulFallbackRollback = rollbackFallbackCandidateSelection;
               return result;
             } catch (err) {
               if (rollbackFallbackCandidateSelection) {
@@ -1239,6 +1244,25 @@ export async function runAgentTurnWithFallback(params: {
       runResult = fallbackResult.result;
       fallbackProvider = fallbackResult.provider;
       fallbackModel = fallbackResult.model;
+
+      // When fallbackPersist is disabled, undo the session override so the next
+      // turn starts fresh with the primary model instead of sticking to the
+      // fallback. The per-turn fallback chain is unaffected.
+      if (
+        params.followupRun.run.config.agents?.defaults?.fallbackPersist === false &&
+        lastSuccessfulFallbackRollback &&
+        (fallbackProvider !== params.followupRun.run.provider ||
+          fallbackModel !== params.followupRun.run.model)
+      ) {
+        try {
+          await lastSuccessfulFallbackRollback();
+        } catch (rollbackError) {
+          logVerbose(
+            `failed to roll back fallback persistence after successful run (non-fatal): ${String(rollbackError)}`,
+          );
+        }
+      }
+
       fallbackAttempts = Array.isArray(fallbackResult.attempts)
         ? fallbackResult.attempts.map((attempt) => ({
             provider: attempt.provider,

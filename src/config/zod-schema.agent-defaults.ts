@@ -125,6 +125,7 @@ export const AgentDefaultsSchema = z
       })
       .strict()
       .optional(),
+    fallbackPersist: z.boolean().optional(),
     compaction: z
       .object({
         mode: z.union([z.literal("default"), z.literal("safeguard")]).optional(),
