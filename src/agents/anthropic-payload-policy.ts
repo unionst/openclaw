@@ -35,8 +35,11 @@ function resolveBaseUrlHostname(baseUrl: string): string | undefined {
 }
 
 function isLongTtlEligibleEndpoint(baseUrl: string | undefined): boolean {
+  // Undefined baseUrl means the caller is relying on the provider SDK's
+  // default endpoint. For the Anthropic provider path that reaches this
+  // check, that default is api.anthropic.com, which supports 1h cache TTL.
   if (typeof baseUrl !== "string") {
-    return false;
+    return true;
   }
   const hostname = resolveBaseUrlHostname(baseUrl);
   if (!hostname) {

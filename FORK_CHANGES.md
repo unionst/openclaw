@@ -168,6 +168,29 @@ No upstream equivalent. Revert via `git revert` if the entire dynamic-routing fe
 
 ---
 
+## src/agents/anthropic-payload-policy.ts — undefined baseUrl is 1h-TTL eligible
+
+**Upstream bug**: `isLongTtlEligibleEndpoint(baseUrl)` returns `false` when `baseUrl` is `undefined`, even though that case means the caller is using the provider SDK's default endpoint, which for the Anthropic provider is `api.anthropic.com` — fully eligible for 1h `cache_control` TTL.
+
+The downstream effect: any agent using `cacheRetention: "long"` without an explicit `baseUrl` in its auth profile silently ships `cache_control: { type: "ephemeral" }` with no `ttl` field, which Anthropic interprets as the default 5-minute TTL. For workloads with multi-minute conversation gaps (texting bots, ops agents), every turn becomes a cache miss, triggering a fresh ~100k-token prefill and ~30–60s of latency before first token.
+
+**Fix**: in `isLongTtlEligibleEndpoint`, treat `undefined baseUrl` as eligible. The function is only called from `resolveAnthropicEphemeralCacheControl`, which is only invoked when the family resolver has already classified the call as Anthropic-compatible, so the broader eligibility doesn't widen the blast radius beyond Anthropic provider paths.
+
+```ts
+function isLongTtlEligibleEndpoint(baseUrl: string | undefined): boolean {
+  if (typeof baseUrl !== "string") {
+    return true; // SDK default = api.anthropic.com
+  }
+  // ... existing hostname allowlist check unchanged
+}
+```
+
+**Test**: `src/agents/anthropic-payload-policy.test.ts` adds one new case asserting that `baseUrl: undefined` + `cacheRetention: "long"` produces `cache_control: { type: "ephemeral", ttl: "1h" }` on both system blocks and the trailing user message. The 6 existing tests are unchanged and still pass.
+
+When upstream lands the same fix (or rejects it explicitly), drop this section.
+
+---
+
 ## Test files updated to match source changes
 
 These test files have assertions that pin the exact prompt strings. They're updated whenever a prompt above changes; they're not new fork features.
