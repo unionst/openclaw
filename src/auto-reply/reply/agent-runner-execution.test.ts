@@ -1862,6 +1862,54 @@ describe("runAgentTurnWithFallback", () => {
     expect(sessionEntry.modelOverride).toBeUndefined();
   });
 
+  it("clears override on total fallback failure when fallbackPersist is false", async () => {
+    state.runWithModelFallbackMock.mockImplementation(async () => {
+      throw Object.assign(new Error("All models failed (2)"), {
+        name: "FallbackSummaryError",
+        attempts: [],
+        soonestCooldownExpiry: null,
+      });
+    });
+
+    const sessionEntry: SessionEntry = {
+      sessionId: "session",
+      updatedAt: Date.now(),
+      providerOverride: "openrouter",
+      modelOverride: "openai/gpt-5.4",
+    };
+    const followupRun = createFollowupRun();
+    followupRun.run.provider = "anthropic";
+    followupRun.run.model = "claude-opus-4-6";
+    followupRun.run.config = { agents: { defaults: { fallbackPersist: false } } } as never;
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback({
+      commandBody: "hello",
+      followupRun,
+      sessionCtx: { Provider: "bluebubbles", MessageSid: "msg" } as unknown as TemplateContext,
+      opts: {},
+      typingSignals: createMockTypingSignaler(),
+      blockReplyPipeline: null,
+      blockStreamingEnabled: false,
+      resolvedBlockStreamingBreak: "message_end",
+      applyReplyToMode: (payload) => payload,
+      shouldEmitToolResult: () => true,
+      shouldEmitToolOutput: () => false,
+      pendingToolTasks: new Set(),
+      resetSessionAfterCompactionFailure: async () => false,
+      resetSessionAfterRoleOrderingConflict: async () => false,
+      isHeartbeat: false,
+      sessionKey: "main",
+      getActiveSessionEntry: () => sessionEntry,
+      activeSessionStore: { main: sessionEntry },
+      resolvedVerboseLevel: "off",
+    });
+
+    expect(result.kind).toBe("final");
+    expect(sessionEntry.providerOverride).toBeUndefined();
+    expect(sessionEntry.modelOverride).toBeUndefined();
+  });
+
   it("keeps same-provider auth profile when fallback only changes model", async () => {
     const applyFallbackCandidateSelectionToEntry =
       await getApplyFallbackCandidateSelectionToEntry();
