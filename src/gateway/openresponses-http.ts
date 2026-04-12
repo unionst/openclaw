@@ -71,6 +71,26 @@ type OpenResponsesHttpOptions = {
 const DEFAULT_BODY_BYTES = 20 * 1024 * 1024;
 const DEFAULT_MAX_URL_PARTS = 8;
 
+function normalizeResponsesUser(user: string | undefined): string | undefined {
+  if (!user) {
+    return user;
+  }
+  const digits = user.replace(/\D/g, "");
+  if (!digits) {
+    return user;
+  }
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+${digits}`;
+  }
+  if (digits.length >= 11) {
+    return `+${digits}`;
+  }
+  return user;
+}
+
 // In-memory map from responseId -> sessionKey for previous_response_id continuity.
 // Entries are evicted after 30 minutes to bound memory usage.
 const RESPONSE_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -473,7 +493,7 @@ export async function handleOpenResponsesHttpRequest(
   const payload: CreateResponseBody = parseResult.data;
   const stream = Boolean(payload.stream);
   const model = payload.model;
-  const user = payload.user;
+  const user = normalizeResponsesUser(payload.user);
   const agentId = resolveAgentIdForRequest({ req, model });
   const { modelOverride, errorMessage: modelError } = await resolveOpenAiCompatModelOverride({
     req,

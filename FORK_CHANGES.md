@@ -191,6 +191,23 @@ When upstream lands the same fix (or rejects it explicitly), drop this section.
 
 ---
 
+## src/gateway/openresponses-http.ts — normalize `user` field to E.164
+
+The `user` field from `/v1/responses` requests becomes the session key via `resolveGatewayRequestContext`. When clients send formatted phone numbers (e.g. `(555) 123-4567` instead of `+15551234567`), separate sessions and cache entries are created for the same user.
+
+**Fix**: added `normalizeResponsesUser()` that strips non-digit characters and formats as E.164 before the user value reaches session resolution. Applied at line 481 where `payload.user` is extracted.
+
+- 10 digits → `+1{digits}` (US number)
+- 11 digits starting with 1 → `+{digits}`
+- 11+ digits → `+{digits}` (international)
+- Non-phone strings (no digits, short digit runs) → returned unchanged
+
+**Test**: `src/gateway/openresponses-user-normalize.test.ts` — 8 cases covering formatted US, bare digits, E.164 passthrough, international, undefined, and non-phone strings.
+
+No upstream equivalent. Safe to drop if upstream adds its own user normalization.
+
+---
+
 ## Sticky model fallback — `agents.defaults.fallbackPersist`
 
 When a primary model (e.g. opus) times out and the fallback chain selects a different model for the turn, upstream persists `modelOverride` and `providerOverride` to the session entry in `sessions.json`. This causes all subsequent turns to skip the primary model entirely.
