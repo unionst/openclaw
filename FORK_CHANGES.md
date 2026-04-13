@@ -60,15 +60,14 @@ User-facing prompt strings updated to remove the OpenClaw word:
 | Self-update header      | `"## OpenClaw Self-Update"`                                                                    | `"## Self-Update"`                                                                                |
 | Self-update body        | `"After restart, OpenClaw pings the last active session automatically."`                       | `"After restart, the runtime pings the last active session automatically."`                       |
 | Workspace files section | `"These user-editable files are loaded by OpenClaw and included below in Project Context."`    | `"These user-editable files are loaded automatically and included below in Project Context."`     |
-| Heartbeat section       | `'OpenClaw treats a leading/trailing "HEARTBEAT_OK" as a heartbeat ack (and may discard it).'` | `'The runtime treats a leading/trailing "HEARTBEAT_OK" as a heartbeat ack (and may discard it).'` |
-
 The mirror/source/community URLs in the docs section were also dropped (`https://docs.openclaw.ai`, `https://github.com/openclaw/openclaw`, `https://discord.com/invite/clawd`, `https://clawhub.ai`).
+
+**Upstream v2026.4.12 note:** the heartbeat section was extracted to `buildHeartbeatSection()` helper and the verbose OpenClaw wording was removed upstream. Our heartbeat scrub is no longer needed.
 
 ### Removals to investigate (NOT YET DONE)
 
 These additional user-facing OpenClaw mentions exist in agent files outside `system-prompt.ts` and should be evaluated for the same scrub policy:
 
-- `src/agents/subagent-announce.ts:139` — `'`agents_list`and`subagents` apply to OpenClaw sub-agents...'` (we changed line 142 of this file but not 139)
 - `src/agents/tools/music-generate-tool.ts:109, 543` — tool description strings sent to the model
 - `src/agents/tools/video-generate-tool.ts:112, 134, 715` — tool description strings
 - `src/agents/tools/image-generate-tool.ts:85` — tool description string
@@ -101,25 +100,18 @@ if (!target) {
 
 ---
 
-## src/agents/subagent-announce.ts
+## src/agents/subagent-system-prompt.ts
 
-### Subagent guidance scrub (1 of 2)
+### Subagent guidance scrub
 
-Line 142, inside the ACP-enabled subagent guidance block:
+**Upstream v2026.4.12 note:** `buildSubagentSystemPrompt` was extracted from `subagent-announce.ts` to the new `subagent-system-prompt.ts` file. Our debranding now applies there instead.
 
-Old:
+Two OpenClaw mentions replaced:
 
-```
-Use `subagents` only for OpenClaw subagents (`runtime: "subagent"`).
-```
-
-New:
-
-```
-Use `subagents` only for native subagents (`runtime: "subagent"`).
-```
-
-Line 139 (`'`agents_list`and`subagents` apply to OpenClaw sub-agents...'`) is NOT yet scrubbed — see "Removals to investigate" above.
+| Old | New |
+|---|---|
+| `'`agents_list` and `subagents` apply to OpenClaw sub-agents...'` | `'...native sub-agents...'` |
+| `'Use `subagents` only for OpenClaw subagents...'` | `'...native subagents...'` |
 
 ---
 
@@ -222,7 +214,7 @@ Files touched:
 - `src/config/zod-schema.agent-defaults.ts` — added `fallbackPersist: z.boolean().optional()` to the Zod schema
 - `src/auto-reply/reply/agent-runner-execution.ts` — hoisted `lastSuccessfulFallbackRollback` closure from the `run` callback; after `runWithModelFallback` succeeds, calls the rollback when `fallbackPersist === false` and the winning model differs from the primary. Fixed failure path to also persist override cleanup to disk via `updateSessionStore` (previously only cleaned in-memory, leaving stale overrides on disk for the next turn).
 
-No upstream equivalent. Safe to drop on merge since `true` (default) preserves upstream behavior.
+**Upstream v2026.4.12 note:** upstream added `modelOverrideSource` field (`"auto" | "user"`) and clears auto-fallback overrides on `/reset` and `/new` (PR #63155, #64471). This is complementary but NOT equivalent — upstream does not roll back overrides after each turn. Our `fallbackPersist: false` behavior is still needed for per-turn rollback. The error-path cleanup now also deletes `modelOverrideSource` alongside `modelOverride`/`providerOverride` to stay consistent with the new upstream schema.
 
 ---
 
