@@ -358,7 +358,6 @@ describeNonWin("exec script preflight", () => {
     });
   });
 
-<<<<<<< HEAD
   it("does not trust a swapped script pathname between validation and read", async () => {
     await expectSymlinkSwapDuringPreflightToAvoidErrors({
       hookName: "afterPreOpenLstat",

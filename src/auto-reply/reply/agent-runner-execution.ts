@@ -1488,6 +1488,7 @@ export async function runAgentTurnWithFallback(params: {
         if (entry) {
           delete entry.modelOverride;
           delete entry.providerOverride;
+          delete entry.modelOverrideSource;
         }
         if (params.storePath && params.sessionKey) {
           try {
@@ -1496,6 +1497,7 @@ export async function runAgentTurnWithFallback(params: {
               if (persistedEntry) {
                 delete persistedEntry.modelOverride;
                 delete persistedEntry.providerOverride;
+                delete persistedEntry.modelOverrideSource;
                 store[params.sessionKey!] = persistedEntry;
               }
             });
