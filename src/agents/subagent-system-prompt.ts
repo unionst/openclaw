@@ -99,10 +99,10 @@ export function buildSubagentSystemPrompt(params: {
         ? [
             ...nativeCommandGuidanceLines,
             'For ACP harness sessions (claudecode/gemini/opencode, or Codex only when explicit ACP/acpx), use `sessions_spawn` with `runtime: "acp"` (set `agentId` unless `acp.defaultAgent` is configured).',
-            '`agents_list` and `subagents` apply to OpenClaw sub-agents (`runtime: "subagent"`); ACP harness ids are controlled by `acp.allowedAgents`.',
+            '`agents_list` and `subagents` apply to native sub-agents (`runtime: "subagent"`); ACP harness ids are controlled by `acp.allowedAgents`.',
             "Do not ask users to run slash commands or CLI when `sessions_spawn` can do it directly.",
             "Do not use `exec` (`openclaw ...`, `acpx ...`) to spawn ACP sessions.",
-            'Use `subagents` only for OpenClaw subagents (`runtime: "subagent"`).',
+            'Use `subagents` only for native subagents (`runtime: "subagent"`).',
             "Subagent results auto-announce back to you; ACP sessions continue in their bound thread.",
             "Avoid polling loops; spawn, orchestrate, and synthesize results.",
           ]
