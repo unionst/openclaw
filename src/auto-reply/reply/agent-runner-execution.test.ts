@@ -1882,6 +1882,8 @@ describe("runAgentTurnWithFallback", () => {
     followupRun.run.model = "claude-opus-4-6";
     followupRun.run.config = { agents: { defaults: { fallbackPersist: false } } } as never;
 
+    const { updateSessionStore: updateSessionStoreMock } = await import("../../config/sessions.js");
+
     const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
     const result = await runAgentTurnWithFallback({
       commandBody: "hello",
@@ -1902,12 +1904,17 @@ describe("runAgentTurnWithFallback", () => {
       sessionKey: "main",
       getActiveSessionEntry: () => sessionEntry,
       activeSessionStore: { main: sessionEntry },
+      storePath: "/tmp/test-sessions.json",
       resolvedVerboseLevel: "off",
     });
 
     expect(result.kind).toBe("final");
     expect(sessionEntry.providerOverride).toBeUndefined();
     expect(sessionEntry.modelOverride).toBeUndefined();
+    expect(updateSessionStoreMock).toHaveBeenCalledWith(
+      "/tmp/test-sessions.json",
+      expect.any(Function),
+    );
   });
 
   it("keeps same-provider auth profile when fallback only changes model", async () => {
