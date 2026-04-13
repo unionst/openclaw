@@ -220,7 +220,7 @@ Files touched:
 
 - `src/config/types.agent-defaults.ts` — added `fallbackPersist?: boolean` to `AgentDefaultsConfig`
 - `src/config/zod-schema.agent-defaults.ts` — added `fallbackPersist: z.boolean().optional()` to the Zod schema
-- `src/auto-reply/reply/agent-runner-execution.ts` — hoisted `lastSuccessfulFallbackRollback` closure from the `run` callback; after `runWithModelFallback` succeeds, calls the rollback when `fallbackPersist === false` and the winning model differs from the primary
+- `src/auto-reply/reply/agent-runner-execution.ts` — hoisted `lastSuccessfulFallbackRollback` closure from the `run` callback; after `runWithModelFallback` succeeds, calls the rollback when `fallbackPersist === false` and the winning model differs from the primary. Fixed failure path to also persist override cleanup to disk via `updateSessionStore` (previously only cleaned in-memory, leaving stale overrides on disk for the next turn).
 
 No upstream equivalent. Safe to drop on merge since `true` (default) preserves upstream behavior.
 

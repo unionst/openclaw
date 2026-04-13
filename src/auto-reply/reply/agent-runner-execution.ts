@@ -1489,6 +1489,20 @@ export async function runAgentTurnWithFallback(params: {
           delete entry.modelOverride;
           delete entry.providerOverride;
         }
+        if (params.storePath && params.sessionKey) {
+          try {
+            await updateSessionStore(params.storePath, (store) => {
+              const persistedEntry = store[params.sessionKey!];
+              if (persistedEntry) {
+                delete persistedEntry.modelOverride;
+                delete persistedEntry.providerOverride;
+                store[params.sessionKey!] = persistedEntry;
+              }
+            });
+          } catch {
+            /* best-effort cleanup */
+          }
+        }
       }
 
       const isRateLimit = isFallbackSummaryError(err)
