@@ -75,6 +75,9 @@ export async function startGatewayMemoryBackend(params: {
       continue;
     }
     armedAgentIds.push(agentId);
+    manager.sync?.({ reason: "startup", force: true }).catch((err) => {
+      params.log.warn(`qmd memory startup sync failed for agent "${agentId}": ${String(err)}`);
+    });
   }
   if (armedAgentIds.length > 0) {
     params.log.info?.(

@@ -50,16 +50,17 @@ Lowercase `openclaw` CLI command references (e.g. `openclaw gateway start`) are 
 
 User-facing prompt strings updated to remove the OpenClaw word:
 
-| Section                 | Old                                                                                            | New                                                                                               |
-| ----------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Messaging guidance      | `"OpenClaw handles all routing internally"`                                                    | `"routing is handled internally"`                                                                 |
-| Documentation section   | `` `OpenClaw docs: ${docsPath}` ``                                                             | `` `Docs: ${docsPath}` ``                                                                         |
-| Documentation section   | `"For OpenClaw behavior, commands, config, or architecture: consult local docs first."`        | `"For runtime behavior, commands, config, or architecture: consult local docs first."`            |
-| CLI section header      | `"## OpenClaw CLI Quick Reference"`                                                            | `"## CLI Quick Reference"`                                                                        |
-| CLI section intro       | `"OpenClaw is controlled via subcommands. Do not invent commands."`                            | `"The runtime is controlled via subcommands. Do not invent commands."`                            |
-| Self-update header      | `"## OpenClaw Self-Update"`                                                                    | `"## Self-Update"`                                                                                |
-| Self-update body        | `"After restart, OpenClaw pings the last active session automatically."`                       | `"After restart, the runtime pings the last active session automatically."`                       |
-| Workspace files section | `"These user-editable files are loaded by OpenClaw and included below in Project Context."`    | `"These user-editable files are loaded automatically and included below in Project Context."`     |
+| Section                 | Old                                                                                         | New                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Messaging guidance      | `"OpenClaw handles all routing internally"`                                                 | `"routing is handled internally"`                                                             |
+| Documentation section   | `` `OpenClaw docs: ${docsPath}` ``                                                          | `` `Docs: ${docsPath}` ``                                                                     |
+| Documentation section   | `"For OpenClaw behavior, commands, config, or architecture: consult local docs first."`     | `"For runtime behavior, commands, config, or architecture: consult local docs first."`        |
+| CLI section header      | `"## OpenClaw CLI Quick Reference"`                                                         | `"## CLI Quick Reference"`                                                                    |
+| CLI section intro       | `"OpenClaw is controlled via subcommands. Do not invent commands."`                         | `"The runtime is controlled via subcommands. Do not invent commands."`                        |
+| Self-update header      | `"## OpenClaw Self-Update"`                                                                 | `"## Self-Update"`                                                                            |
+| Self-update body        | `"After restart, OpenClaw pings the last active session automatically."`                    | `"After restart, the runtime pings the last active session automatically."`                   |
+| Workspace files section | `"These user-editable files are loaded by OpenClaw and included below in Project Context."` | `"These user-editable files are loaded automatically and included below in Project Context."` |
+
 The mirror/source/community URLs in the docs section were also dropped (`https://docs.openclaw.ai`, `https://github.com/openclaw/openclaw`, `https://discord.com/invite/clawd`, `https://clawhub.ai`).
 
 **Upstream v2026.4.12 note:** the heartbeat section was extracted to `buildHeartbeatSection()` helper and the verbose OpenClaw wording was removed upstream. Our heartbeat scrub is no longer needed.
@@ -108,10 +109,10 @@ if (!target) {
 
 Two OpenClaw mentions replaced:
 
-| Old | New |
-|---|---|
-| `'`agents_list` and `subagents` apply to OpenClaw sub-agents...'` | `'...native sub-agents...'` |
-| `'Use `subagents` only for OpenClaw subagents...'` | `'...native subagents...'` |
+| Old                                                             | New                         |
+| --------------------------------------------------------------- | --------------------------- |
+| `'`agents_list`and`subagents` apply to OpenClaw sub-agents...'` | `'...native sub-agents...'` |
+| `'Use `subagents` only for OpenClaw subagents...'`              | `'...native subagents...'`  |
 
 ---
 
@@ -215,6 +216,14 @@ Files touched:
 - `src/auto-reply/reply/agent-runner-execution.ts` — hoisted `lastSuccessfulFallbackRollback` closure from the `run` callback; after `runWithModelFallback` succeeds, calls the rollback when `fallbackPersist === false` and the winning model differs from the primary. Fixed failure path to also persist override cleanup to disk via `updateSessionStore` (previously only cleaned in-memory, leaving stale overrides on disk for the next turn).
 
 **Upstream v2026.4.12 note:** upstream added `modelOverrideSource` field (`"auto" | "user"`) and clears auto-fallback overrides on `/reset` and `/new` (PR #63155, #64471). This is complementary but NOT equivalent — upstream does not roll back overrides after each turn. Our `fallbackPersist: false` behavior is still needed for per-turn rollback. The error-path cleanup now also deletes `modelOverrideSource` alongside `modelOverride`/`providerOverride` to stay consistent with the new upstream schema.
+
+---
+
+## src/gateway/server-startup-memory.ts — eager memory index sync on startup
+
+Upstream creates the `MemoryIndexManager` at gateway startup but does not trigger a sync. The first `memory_search` call pays a ~10s cold-start penalty as it force-syncs the index inline. This fork adds a fire-and-forget `manager.sync({ reason: "startup", force: true })` call immediately after the manager is obtained, so the index is warm by the time the first search arrives.
+
+No upstream equivalent. Safe to drop if upstream adds eager startup sync.
 
 ---
 
