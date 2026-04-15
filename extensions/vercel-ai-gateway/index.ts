@@ -4,6 +4,7 @@ import {
   buildStaticVercelAiGatewayProvider,
   buildVercelAiGatewayProvider,
 } from "./provider-catalog.js";
+import { wrapVercelAiGatewayProviderStream } from "./stream-wrappers.js";
 
 const PROVIDER_ID = "vercel-ai-gateway";
 
@@ -35,5 +36,6 @@ export default defineSingleProviderPluginEntry({
       buildProvider: buildVercelAiGatewayProvider,
       buildStaticProvider: buildStaticVercelAiGatewayProvider,
     },
+    wrapStreamFn: wrapVercelAiGatewayProviderStream,
   },
 });

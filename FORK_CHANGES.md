@@ -219,6 +219,32 @@ Files touched:
 
 ---
 
+## extensions/vercel-ai-gateway — Opus 4.6 fast mode wire-up
+
+**Upstream gap**: the `vercel-ai-gateway` provider plugin registers with no `wrapStreamFn`. Anthropic models routed through the gateway (`provider: "vercel-ai-gateway"`, `api: "anthropic-messages"`, `model: anthropic/claude-opus-4.6`) therefore bypass all Anthropic-family stream wrappers — including fast-mode. The existing `createAnthropicFastModeWrapper` in `extensions/anthropic/stream-wrappers.ts` is gated on `allowsAnthropicServiceTier`, which requires `provider === "anthropic"` (see `src/agents/provider-attribution.ts:595`), so even reusing it wouldn't fire for the gateway path. Separately, that wrapper emits `service_tier: "auto"` (Anthropic's priority tier — a distinct feature), not the Opus 4.6 fast-mode wire format.
+
+**Correct fast-mode wire format** (verified from `@ai-sdk/anthropic` `anthropic-messages-language-model.ts` and Vercel's `ai-gateway-anthropic-messages-api` docs):
+
+- Top-level body field: `speed: "fast"`
+- Header merged into `anthropic-beta`: `fast-mode-2026-02-01`
+- No endpoint change; same `POST /v1/messages` passthrough
+
+**Fix**: added a new `wrapStreamFn` for the Vercel AI Gateway plugin that injects the correct payload + beta header when `extraParams.fastMode === true` and the underlying model is Opus 4.6.
+
+Files:
+
+- `extensions/vercel-ai-gateway/stream-wrappers.ts` (new) — `createVercelAiGatewayAnthropicFastModeWrapper`, `wrapVercelAiGatewayProviderStream`, `resolveVercelAiGatewayFastMode`, plus local helpers for beta-header merging and fast-mode-string normalization. Model eligibility is gated on `model.api === "anthropic-messages"` plus a prefix match on `anthropic/claude-opus-4.6` or `anthropic/claude-opus-4-6` to avoid sending `speed` to non-Anthropic or non-Opus-4.6 models that happen to route through the gateway.
+- `extensions/vercel-ai-gateway/index.ts` — added `wrapStreamFn: wrapVercelAiGatewayProviderStream` to the `provider` block. `defineSingleProviderPluginEntry` passes unknown `provider.*` fields through to `api.registerProvider` (`src/plugin-sdk/provider-entry.ts:157-161`), so the type system and runtime both accept it.
+- `extensions/vercel-ai-gateway/stream-wrappers.test.ts` (new) — coverage for payload injection, beta-header merge, non-eligible-model bypass, disabled path, existing-value preservation, and `wrapVercelAiGatewayProviderStream` composition under `fastMode: true | false | undefined`.
+
+**No wider changes.** Native Anthropic provider behavior is unchanged — `service_tier: "auto"` still fires there as before. If we ever want fast mode on the Anthropic-direct fallback path too, extend `extensions/anthropic/stream-wrappers.ts` in a follow-up using the same `speed` + beta-header pattern.
+
+**Config requirement**: agents must already have `fastModeDefault: true` (or `extraParams.fastMode = true` on the session) for the wrapper to fire. No schema changes needed.
+
+When upstream lands equivalent wiring (either a Vercel gateway wrapStreamFn for Anthropic or a generalized fast-mode hook that covers passthrough gateways), drop this section.
+
+---
+
 ## src/gateway/server-startup-memory.ts — eager memory index sync on startup
 
 Upstream creates the `MemoryIndexManager` at gateway startup but does not trigger a sync. The first `memory_search` call pays a ~10s cold-start penalty as it force-syncs the index inline. This fork adds a fire-and-forget `manager.sync?.({ reason: "startup", force: true })` call immediately after the manager is obtained, so the index is warm by the time the first search arrives. Uses optional chaining because `MemorySearchManager.sync` is typed as optional on the host SDK interface — qmd backends always implement it, but the type system can't prove that here.
