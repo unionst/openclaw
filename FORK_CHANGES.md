@@ -221,7 +221,7 @@ Files touched:
 
 ## src/gateway/server-startup-memory.ts — eager memory index sync on startup
 
-Upstream creates the `MemoryIndexManager` at gateway startup but does not trigger a sync. The first `memory_search` call pays a ~10s cold-start penalty as it force-syncs the index inline. This fork adds a fire-and-forget `manager.sync({ reason: "startup", force: true })` call immediately after the manager is obtained, so the index is warm by the time the first search arrives.
+Upstream creates the `MemoryIndexManager` at gateway startup but does not trigger a sync. The first `memory_search` call pays a ~10s cold-start penalty as it force-syncs the index inline. This fork adds a fire-and-forget `manager.sync?.({ reason: "startup", force: true })` call immediately after the manager is obtained, so the index is warm by the time the first search arrives. Uses optional chaining because `MemorySearchManager.sync` is typed as optional on the host SDK interface — qmd backends always implement it, but the type system can't prove that here.
 
 No upstream equivalent. Safe to drop if upstream adds eager startup sync.
 
