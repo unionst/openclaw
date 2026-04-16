@@ -245,6 +245,19 @@ When upstream lands equivalent wiring (either a Vercel gateway wrapStreamFn for 
 
 ---
 
+## extensions/vercel-ai-gateway/models.ts — opus 4.7 in static catalog + reject non-positive token limits
+
+**Upstream gap**: Vercel AI Gateway's `/v1/models` endpoint returns `context_window: 0` and `max_tokens: 0` for non-LLM models (video, image, embedding, etc.). Upstream's `buildDiscoveredModelDefinition` only checks `Number.isFinite(value)` — `0` passes that check. The resulting `models.json` contains entries with `contextWindow: 0`. The `@mariozechner/pi-coding-agent` `ModelRegistry` validator then rejects the **entire custom-models block** on any such entry. Net effect: dynamically-discovered models (including newly-released ones like opus 4.7) are silently dropped; only the library's built-in catalog is available. A failing `agents/pi-embedded-runner/run.ts#resolveModelAsync` call throws `FailoverError: Unknown model: ...` for any model not in the built-in list.
+
+**Fix**:
+
+1. Added `isPositiveFiniteNumber` helper and tightened `buildDiscoveredModelDefinition` to treat `0` (and any non-positive value) as invalid for `context_window` / `max_tokens`, falling back to `VERCEL_AI_GATEWAY_DEFAULT_CONTEXT_WINDOW` / `VERCEL_AI_GATEWAY_DEFAULT_MAX_TOKENS` instead. This produces valid entries that pass pi-agent-core's schema validator so the custom-models block loads cleanly.
+2. Added `anthropic/claude-opus-4.7` to `STATIC_VERCEL_AI_GATEWAY_MODEL_CATALOG` so the model is recognized even when dynamic discovery fails (timeout, network, etc.).
+
+Drop this section when upstream adds equivalent filtering.
+
+---
+
 ## src/gateway/server-startup-memory.ts — eager memory index sync on startup
 
 Upstream creates the `MemoryIndexManager` at gateway startup but does not trigger a sync. The first `memory_search` call pays a ~10s cold-start penalty as it force-syncs the index inline. This fork adds a fire-and-forget `manager.sync?.({ reason: "startup", force: true })` call immediately after the manager is obtained, so the index is warm by the time the first search arrives. Uses optional chaining because `MemorySearchManager.sync` is typed as optional on the host SDK interface — qmd backends always implement it, but the type system can't prove that here.
