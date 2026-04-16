@@ -42,6 +42,20 @@ type StaticVercelGatewayModel = Omit<ModelDefinitionConfig, "cost"> & {
 
 const STATIC_VERCEL_AI_GATEWAY_MODEL_CATALOG: readonly StaticVercelGatewayModel[] = [
   {
+    id: "anthropic/claude-opus-4.7",
+    name: "Claude Opus 4.7",
+    reasoning: true,
+    input: ["text", "image"],
+    contextWindow: 1_000_000,
+    maxTokens: 128_000,
+    cost: {
+      input: 5,
+      output: 25,
+      cacheRead: 0.5,
+      cacheWrite: 6.25,
+    },
+  },
+  {
     id: "anthropic/claude-opus-4.6",
     name: "Claude Opus 4.6",
     reasoning: true,
@@ -129,6 +143,10 @@ export function getStaticVercelAiGatewayModelCatalog(): ModelDefinitionConfig[] 
   return STATIC_VERCEL_AI_GATEWAY_MODEL_CATALOG.map(buildStaticModelDefinition);
 }
 
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
 function buildDiscoveredModelDefinition(
   model: VercelGatewayModelShape,
 ): ModelDefinitionConfig | null {
@@ -138,14 +156,12 @@ function buildDiscoveredModelDefinition(
   }
 
   const fallback = getStaticFallbackModel(id);
-  const contextWindow =
-    typeof model.context_window === "number" && Number.isFinite(model.context_window)
-      ? model.context_window
-      : (fallback?.contextWindow ?? VERCEL_AI_GATEWAY_DEFAULT_CONTEXT_WINDOW);
-  const maxTokens =
-    typeof model.max_tokens === "number" && Number.isFinite(model.max_tokens)
-      ? model.max_tokens
-      : (fallback?.maxTokens ?? VERCEL_AI_GATEWAY_DEFAULT_MAX_TOKENS);
+  const contextWindow = isPositiveFiniteNumber(model.context_window)
+    ? model.context_window
+    : (fallback?.contextWindow ?? VERCEL_AI_GATEWAY_DEFAULT_CONTEXT_WINDOW);
+  const maxTokens = isPositiveFiniteNumber(model.max_tokens)
+    ? model.max_tokens
+    : (fallback?.maxTokens ?? VERCEL_AI_GATEWAY_DEFAULT_MAX_TOKENS);
   const normalizedCost = normalizeCost(model.pricing);
 
   return {
