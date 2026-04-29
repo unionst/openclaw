@@ -321,6 +321,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
         coalesceSameSenderDms: {
           type: "boolean",
         },
+        allowAgentIdOverride: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+        },
         accounts: {
           type: "object",
           properties: {},
@@ -637,6 +643,12 @@ export const GENERATED_BUNDLED_CHANNEL_CONFIG_METADATA = [
               },
               coalesceSameSenderDms: {
                 type: "boolean",
+              },
+              allowAgentIdOverride: {
+                type: "array",
+                items: {
+                  type: "string",
+                },
               },
             },
             required: ["enrichGroupParticipantsFromContacts"],
