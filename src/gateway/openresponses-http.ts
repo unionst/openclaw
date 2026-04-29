@@ -421,6 +421,7 @@ async function runResponsesAgentCommand(params: {
   runId: string;
   messageChannel: string;
   senderIsOwner: boolean;
+  thinking?: string;
   deps: CliDeps;
   abortSignal?: AbortSignal;
 }) {
@@ -434,6 +435,7 @@ async function runResponsesAgentCommand(params: {
       streamParams: params.streamParams ?? undefined,
       sessionKey: params.sessionKey,
       runId: params.runId,
+      thinkingOnce: params.thinking,
       deliver: false,
       messageChannel: params.messageChannel,
       bestEffortDeliver: false,
@@ -712,6 +714,7 @@ export async function handleOpenResponsesHttpRequest(
         runId: responseId,
         messageChannel,
         senderIsOwner,
+        thinking: payload.reasoning?.effort,
         deps,
         abortSignal: abortController.signal,
       });
@@ -1000,6 +1003,7 @@ export async function handleOpenResponsesHttpRequest(
         runId: responseId,
         messageChannel,
         senderIsOwner,
+        thinking: payload.reasoning?.effort,
         deps,
         abortSignal: abortController.signal,
       });

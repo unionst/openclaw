@@ -4,6 +4,23 @@ This file tracks every deviation in this fork from upstream `openclaw/openclaw`.
 
 When merging upstream, walk this file top-to-bottom and re-apply / re-verify each entry.
 
+## Upstream sync notes
+
+**v2026.4.26 rebase (current):**
+
+- Documentation section in `system-prompt.ts` had upstream additions (config schema lookup hint, broader configuration docs guidance). Kept those, dropped the OpenClaw URLs/mirror/community fallbacks per fork debrand policy. When `docsPath` is undefined, the section now omits the docs line entirely (vs upstream which falls back to public URLs).
+- `src/agents/bash-tools.exec.script-preflight.test.ts`: upstream restructured the 16 fail-closed cases into a parameterized `it.each(failClosedCases)`. The fork's prior `it.skip` overlay is no longer applicable — took upstream's parameterized version. The tests verify `validateExecScriptPreflight` directly; bash-tools.exec.ts still skips invoking it, so behavior is unchanged.
+- `extensions/bluebubbles/src/types.ts`: upstream introduced `fetchWithRuntimeDispatcherOrMockedGlobal` which subsumes the fork's manual `fetchWithRuntimeDispatcher` switch. Switched to the upstream helper and dropped the now-unused `fetchWithRuntimeDispatcher` import.
+- `extensions/bluebubbles/src/conversation-route.ts`: upstream added `buildAgentPeerSessionKey`/`deriveLastRoutePolicy` to the imports. The fork's `resolveAgentIdFromSessionKey` import is no longer referenced; dropped it.
+- `extensions/bluebubbles/src/config-schema.ts`: upstream added `coalesceSameSenderDms`. Kept both new fields side-by-side.
+- `src/config/bundled-channel-config-metadata.generated.ts`: regenerated from the schema (instead of cherry-picking the fork's old generated diff).
+- `src/config/types.agent-defaults.ts` + `zod-schema.agent-defaults.ts`: **breaking change** — upstream deprecated `agents.defaults.llm` (PR migrated to `models.providers.<id>.timeoutSeconds`). The fork's `fallbackPersist` field is preserved; the `llm` field is gone. Existing configs with `llm: { idleTimeoutSeconds: ... }` must migrate to `models.providers.<id>.timeoutSeconds` (the doctor migration handles auto-removal but doesn't auto-port). **jesse `openclaw.json.template` action item: remove `agents.defaults.llm` and add the timeout under `models.providers`.**
+- `src/auto-reply/reply/agent-runner-execution.ts`: upstream added `outcomePlan` + typed `runWithModelFallback<EmbeddedAgentRunResult>` + new error-classification logic (`isFallbackSummary`/`isPureTransientSummary`). Merged with the fork's `lastSuccessfulFallbackRollback` capture and `fallbackPersist`-driven override cleanup on total failure.
+- `src/agents/subagent-system-prompt.ts`: upstream added `nativeCommandGuidanceLines` + more nuanced ACP wording (claudecode/gemini/opencode + Codex caveat). Kept upstream's content; applied the fork debrand (OpenClaw → native).
+- `src/gateway/openresponses-http.ts`: upstream extracted `wrapUntrustedFileContent` to its own module. Dropped the fork's local copy. Kept `normalizeResponsesUser`. Added new fork patch for `reasoning.effort` plumbing (see entry below).
+- `src/gateway/server-startup-memory.ts`: upstream batched the per-agent log into `armedAgentIds`/`deferredAgentIds` summaries. Merged: kept upstream's batching + the fork's `manager.sync?.()` eager startup call.
+- `extensions/vercel-ai-gateway/index.ts`: upstream added `buildStaticVercelAiGatewayProvider` to the catalog. Kept it alongside the fork's `wrapStreamFn: wrapVercelAiGatewayProviderStream`.
+
 ---
 
 ## src/agents/system-prompt.ts
@@ -284,3 +301,21 @@ These test files have assertions that pin the exact prompt strings. They're upda
 
 - 16 `it("fails closed for…")` cases changed to `it.skip(…)` because the throw they assert was removed in `bash-tools.exec.ts`. Test bodies preserved verbatim so an upstream merge can re-enable them if upstream changes the underlying behavior. The 13 `it("does not fail closed for…")` negative tests are untouched.
 - All other preflight tests in this file (shell variable injection, JS-as-shell, path-qualified env, script path sandbox) are unchanged and still run.
+
+**v2026.4.26 update:** upstream restructured to a parameterized `it.each(failClosedCases)` test. The fork's `it.skip` overlay was dropped because the validator (`validateExecScriptPreflight`) is still tested directly and still throws as designed; the fork's behavior change lives in `bash-tools.exec.ts` (which no longer invokes the validator at runtime).
+
+---
+
+## src/gateway/openresponses-http.ts + src/gateway/open-responses.schema.ts — honor `reasoning.effort`
+
+The Zod schema for `/v1/responses` requests accepted `reasoning.effort` (`low | medium | high`) but the handler never read it — the field was in the "Phase 1: ignore but accept" bucket. Calls came in carrying `reasoning: { effort: "low" }`, the agent ran at its persisted/default thinking level (typically `high`), and clients had no actual control over per-request reasoning depth.
+
+The runtime substrate already supports this: `agentCommandFromIngress` accepts `opts.thinking` / `opts.thinkingOnce`, runs them through `normalizeThinkLevel` (`low | medium | high` map directly), and applies as a per-turn override (`thinkOnce ?? thinkOverride ?? persistedThinking` at `agents/agent-command.ts:506`). Just nothing wired the HTTP boundary to it.
+
+**Fix**:
+
+1. `runResponsesAgentCommand` accepts a `thinking?: string` parameter and forwards it as `thinkingOnce` to `agentCommandFromIngress`. One-shot semantics — no persistence to the session store.
+2. Both call sites (non-streaming line ~706 + streaming line ~994) pass `thinking: payload.reasoning?.effort` through.
+3. Schema comment updated to reflect that `reasoning.effort` is honored; `summary` is still ignored.
+
+**No upstream equivalent yet.** The "Phase 1: ignore" comment suggests upstream intends to wire this eventually. Drop this section if/when they do.

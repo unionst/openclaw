@@ -207,6 +207,8 @@ export const CreateResponseBodySchema = z
     metadata: z.record(z.string(), z.string()).optional(),
     store: z.boolean().optional(),
     previous_response_id: z.string().optional(),
+    // reasoning.effort is honored: forwarded as a one-shot thinking-level
+    // override to agentCommandFromIngress. summary is still ignored.
     reasoning: z
       .object({
         effort: z.enum(["low", "medium", "high"]).optional(),
