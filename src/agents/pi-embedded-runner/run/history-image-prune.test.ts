@@ -369,4 +369,81 @@ describe("installHistoryImagePruneContextTransform", () => {
     restore();
     expect(agent.transformContext).toBe(originalTransformContext);
   });
+
+  describe("prompt-cache aware deferral", () => {
+    const assistantTurn = () => castAgentMessage({ role: "assistant", content: "ack" });
+    const imageTurn = () =>
+      castAgentMessage({
+        role: "user",
+        content: [{ type: "text", text: "shot" }, { ...image }],
+      });
+    const warmPolicy = {
+      cacheRetention: "long" as const,
+      lastCacheTouchAt: 1_000_000,
+      now: 1_000_000 + 60_000,
+    };
+
+    it("defers pruning while the prompt cache is warm and few image turns are prunable", () => {
+      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
+      expect(pruneProcessedHistoryImages(messages, warmPolicy)).toBeNull();
+    });
+
+    it("prunes once the cache has gone cold", () => {
+      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
+      const coldPolicy = { ...warmPolicy, now: 1_000_000 + 61 * 60_000 };
+      const pruned = pruneProcessedHistoryImages(messages, coldPolicy);
+      expect(pruned).not.toBeNull();
+      expect(expectArrayMessageContent(pruned?.[0], "expected pruned content")[1]).toMatchObject({
+        type: "text",
+        text: PRUNED_HISTORY_IMAGE_MARKER,
+      });
+    });
+
+    it("prunes while warm once enough image turns have accumulated", () => {
+      const messages: AgentMessage[] = [];
+      for (let i = 0; i < 8; i++) {
+        messages.push(imageTurn(), assistantTurn());
+      }
+      messages.push(...oldEnoughTail().slice(1));
+      const deferred = pruneProcessedHistoryImages(messages, {
+        ...warmPolicy,
+        maxDeferredImageTurns: 9,
+      });
+      expect(deferred).toBeNull();
+      const pruned = pruneProcessedHistoryImages(messages, {
+        ...warmPolicy,
+        maxDeferredImageTurns: 8,
+      });
+      expect(pruned).not.toBeNull();
+      for (let i = 0; i < 5; i++) {
+        expect(expectArrayMessageContent(pruned?.[i * 2], "expected pruned turn")[1]).toMatchObject(
+          {
+            type: "text",
+            text: PRUNED_HISTORY_IMAGE_MARKER,
+          },
+        );
+      }
+    });
+
+    it("treats no retention as a cold cache and prunes immediately", () => {
+      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
+      expect(
+        pruneProcessedHistoryImages(messages, {
+          cacheRetention: "none",
+          lastCacheTouchAt: Date.now(),
+        }),
+      ).not.toBeNull();
+    });
+
+    it("passes the resolved policy through the context transform", async () => {
+      const agent: {
+        transformContext?: (messages: AgentMessage[]) => AgentMessage[] | Promise<AgentMessage[]>;
+      } = {};
+      const uninstall = installHistoryImagePruneContextTransform(agent, () => warmPolicy);
+      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
+      const transformed = await agent.transformContext?.(messages);
+      expect(transformed).toBe(messages);
+      uninstall();
+    });
+  });
 });

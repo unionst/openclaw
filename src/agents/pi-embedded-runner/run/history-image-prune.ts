@@ -15,6 +15,99 @@ type PrunableContextAgent = {
   ) => AgentMessage[] | Promise<AgentMessage[]>;
 };
 
+export type HistoryImagePruneCacheRetention = "none" | "short" | "long";
+
+/**
+ * Decides whether pruning may be deferred to protect the provider prompt cache.
+ * Every prune rewrites an old message, which invalidates every cached prefix
+ * that extends past it. While the cache is warm that rewrite is paid for in
+ * full on the next call, so pruning waits until the cache has gone cold or
+ * until enough prunable turns have piled up to justify one deliberate rewrite.
+ */
+export type HistoryImagePrunePolicy = {
+  cacheRetention?: HistoryImagePruneCacheRetention;
+  lastCacheTouchAt?: number | null;
+  maxDeferredImageTurns?: number;
+  now?: number;
+};
+
+export const DEFAULT_MAX_DEFERRED_IMAGE_TURNS = 8;
+
+const CACHE_RETENTION_TTL_MS: Record<HistoryImagePruneCacheRetention, number> = {
+  none: 0,
+  short: 5 * 60 * 1000,
+  long: 60 * 60 * 1000,
+};
+
+export function resolveHistoryImagePruneCacheTtlMs(
+  retention: HistoryImagePruneCacheRetention | undefined,
+): number {
+  return retention ? CACHE_RETENTION_TTL_MS[retention] : 0;
+}
+
+function isPromptCacheWarm(policy: HistoryImagePrunePolicy, now: number): boolean {
+  const ttlMs = resolveHistoryImagePruneCacheTtlMs(policy.cacheRetention);
+  if (ttlMs <= 0) {
+    return false;
+  }
+  const lastTouch = policy.lastCacheTouchAt;
+  if (typeof lastTouch !== "number" || !Number.isFinite(lastTouch)) {
+    return false;
+  }
+  return now - lastTouch < ttlMs;
+}
+
+function messageCarriesPrunableMedia(message: AgentMessage | undefined): boolean {
+  if (!message || (message.role !== "user" && message.role !== "toolResult")) {
+    return false;
+  }
+  if (typeof message.content === "string") {
+    return pruneHistoryMediaReferenceText(message.content) !== message.content;
+  }
+  if (!Array.isArray(message.content)) {
+    return false;
+  }
+  return message.content.some((block) => {
+    if (!block || typeof block !== "object") {
+      return false;
+    }
+    const blockType = (block as { type?: string }).type;
+    if (blockType === "image") {
+      return true;
+    }
+    if (blockType === "text" && typeof (block as { text?: unknown }).text === "string") {
+      const text = (block as { text: string }).text;
+      return pruneHistoryMediaReferenceText(text) !== text;
+    }
+    return false;
+  });
+}
+
+function countPrunableMediaTurns(messages: AgentMessage[], pruneBeforeIndex: number): number {
+  let count = 0;
+  for (let i = 0; i < pruneBeforeIndex; i++) {
+    if (messageCarriesPrunableMedia(messages[i])) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function shouldDeferHistoryImagePrune(
+  messages: AgentMessage[],
+  pruneBeforeIndex: number,
+  policy: HistoryImagePrunePolicy | undefined,
+): boolean {
+  if (!policy || pruneBeforeIndex <= 0) {
+    return false;
+  }
+  if (!isPromptCacheWarm(policy, policy.now ?? Date.now())) {
+    return false;
+  }
+  const maxDeferred = policy.maxDeferredImageTurns ?? DEFAULT_MAX_DEFERRED_IMAGE_TURNS;
+  return countPrunableMediaTurns(messages, pruneBeforeIndex) < maxDeferred;
+}
+
 /**
  * Number of most-recent completed turns whose preceding user/toolResult image
  * blocks are kept intact. Counts all completed turns, not just image-bearing
@@ -80,9 +173,15 @@ function cloneMessageWithContent(
  * same boundary because detectAndLoadPromptImages treats them as fresh prompt
  * image references when old history is replayed into a later prompt.
  */
-export function pruneProcessedHistoryImages(messages: AgentMessage[]): AgentMessage[] | null {
+export function pruneProcessedHistoryImages(
+  messages: AgentMessage[],
+  policy?: HistoryImagePrunePolicy,
+): AgentMessage[] | null {
   const pruneBeforeIndex = resolvePruneBeforeIndex(messages);
   if (pruneBeforeIndex < 0) {
+    return null;
+  }
+  if (shouldDeferHistoryImagePrune(messages, pruneBeforeIndex, policy)) {
     return null;
   }
 
@@ -148,14 +247,17 @@ export function pruneProcessedHistoryImages(messages: AgentMessage[]): AgentMess
   return prunedMessages;
 }
 
-export function installHistoryImagePruneContextTransform(agent: PrunableContextAgent): () => void {
+export function installHistoryImagePruneContextTransform(
+  agent: PrunableContextAgent,
+  resolvePolicy?: () => HistoryImagePrunePolicy | undefined,
+): () => void {
   const originalTransformContext = agent.transformContext;
   agent.transformContext = async (messages: AgentMessage[], signal?: AbortSignal) => {
     const transformed = originalTransformContext
       ? await originalTransformContext.call(agent, messages, signal)
       : messages;
     const sourceMessages = Array.isArray(transformed) ? transformed : messages;
-    return pruneProcessedHistoryImages(sourceMessages) ?? sourceMessages;
+    return pruneProcessedHistoryImages(sourceMessages, resolvePolicy?.()) ?? sourceMessages;
   };
   return () => {
     agent.transformContext = originalTransformContext;

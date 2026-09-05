@@ -302,6 +302,7 @@ import {
   shouldFlagCompactionTimeout,
 } from "./compaction-timeout.js";
 import {
+  type HistoryImagePrunePolicy,
   installHistoryImagePruneContextTransform,
   pruneProcessedHistoryImages,
 } from "./history-image-prune.js";
@@ -1468,8 +1469,16 @@ export async function runEmbeddedAttempt(
         });
       }
       const removeLoopContextGuard = removeToolResultContextGuard;
+      const resolveHistoryImagePrunePolicy = (): HistoryImagePrunePolicy => ({
+        cacheRetention: effectivePromptCacheRetention,
+        lastCacheTouchAt: readLastCacheTtlTimestamp(sessionManager, {
+          provider: params.provider,
+          modelId: params.modelId,
+        }),
+      });
       const removeHistoryImagePruneContextTransform = installHistoryImagePruneContextTransform(
         activeSession.agent,
+        resolveHistoryImagePrunePolicy,
       );
       removeToolResultContextGuard = () => {
         removeHistoryImagePruneContextTransform();
@@ -2251,7 +2260,8 @@ export async function runEmbeddedAttempt(
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
         };
         const promptBuildMessages =
-          pruneProcessedHistoryImages(activeSession.messages) ?? activeSession.messages;
+          pruneProcessedHistoryImages(activeSession.messages, resolveHistoryImagePrunePolicy()) ??
+          activeSession.messages;
         const hookResult = await resolvePromptBuildHookResult({
           prompt: params.prompt,
           messages: promptBuildMessages,

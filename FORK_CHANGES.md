@@ -319,3 +319,9 @@ The runtime substrate already supports this: `agentCommandFromIngress` accepts `
 3. Schema comment updated to reflect that `reasoning.effort` is honored; `summary` is still ignored.
 
 **No upstream equivalent yet.** The "Phase 1: ignore" comment suggests upstream intends to wire this eventually. Drop this section if/when they do.
+
+## src/agents/pi-embedded-runner/run/history-image-prune.ts — prompt-cache aware image pruning
+
+Upstream replaces image blocks in every completed turn older than the three most recent ones with a text marker, on every prompt. That rewrite moves one message per turn, so no cached prefix past it ever matches again: a user who sends screenshots with every message pays a full history cache write on every single call (measured on a 130k-token iMessage session: 137 of 140 boundary moves were full misses, ~$0.4–0.8 each).
+
+`pruneProcessedHistoryImages` now takes an optional `HistoryImagePrunePolicy` (`cacheRetention`, `lastCacheTouchAt`, `maxDeferredImageTurns`, default 8). While the provider prompt cache is still warm (retention `long` = 1h, `short` = 5m, measured from the session's last `openclaw.cache-ttl` entry) pruning is deferred until at least `maxDeferredImageTurns` prunable turns have accumulated; once the cache is cold the rewrite is free and pruning proceeds as before. `attempt.ts` resolves the policy from `effectivePromptCacheRetention` and `readLastCacheTtlTimestamp` at both the pre-prompt prune and the in-loop `transformContext` hook. Behaviour without a policy is unchanged. Candidate for upstream.
