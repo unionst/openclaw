@@ -370,80 +370,90 @@ describe("installHistoryImagePruneContextTransform", () => {
     expect(agent.transformContext).toBe(originalTransformContext);
   });
 
-  describe("prompt-cache aware deferral", () => {
+  describe("prompt-cache aware boundary freezing", () => {
     const assistantTurn = () => castAgentMessage({ role: "assistant", content: "ack" });
     const imageTurn = () =>
       castAgentMessage({
         role: "user",
         content: [{ type: "text", text: "shot" }, { ...image }],
       });
-    const warmPolicy = {
+    const makeStore = () => {
+      const entries: Array<{ type: string; customType: string; data: unknown }> = [];
+      return {
+        entries,
+        appendCustomEntry: (customType: string, data: unknown) => {
+          entries.push({ type: "custom", customType, data });
+        },
+        getEntries: () => entries,
+      };
+    };
+    const warm = {
       cacheRetention: "long" as const,
       lastCacheTouchAt: 1_000_000,
       now: 1_000_000 + 60_000,
     };
-
-    it("defers pruning while the prompt cache is warm and few image turns are prunable", () => {
-      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
-      expect(pruneProcessedHistoryImages(messages, warmPolicy)).toBeNull();
-    });
-
-    it("prunes once the cache has gone cold", () => {
-      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
-      const coldPolicy = { ...warmPolicy, now: 1_000_000 + 61 * 60_000 };
-      const pruned = pruneProcessedHistoryImages(messages, coldPolicy);
-      expect(pruned).not.toBeNull();
-      expect(expectArrayMessageContent(pruned?.[0], "expected pruned content")[1]).toMatchObject({
-        type: "text",
-        text: PRUNED_HISTORY_IMAGE_MARKER,
-      });
-    });
-
-    it("prunes while warm once enough image turns have accumulated", () => {
+    const cold = { ...warm, now: 1_000_000 + 61 * 60_000 };
+    const conversation = (imageTurns: number) => {
       const messages: AgentMessage[] = [];
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < imageTurns; i++) {
         messages.push(imageTurn(), assistantTurn());
       }
-      messages.push(...oldEnoughTail().slice(1));
-      const deferred = pruneProcessedHistoryImages(messages, {
-        ...warmPolicy,
-        maxDeferredImageTurns: 9,
-      });
-      expect(deferred).toBeNull();
-      const pruned = pruneProcessedHistoryImages(messages, {
-        ...warmPolicy,
-        maxDeferredImageTurns: 8,
-      });
-      expect(pruned).not.toBeNull();
-      for (let i = 0; i < 5; i++) {
-        expect(expectArrayMessageContent(pruned?.[i * 2], "expected pruned turn")[1]).toMatchObject(
-          {
-            type: "text",
-            text: PRUNED_HISTORY_IMAGE_MARKER,
-          },
-        );
+      return messages;
+    };
+
+    it("keeps the boundary where the last cold request left it while the cache is warm", () => {
+      const store = makeStore();
+      const messages = conversation(5);
+      const first = pruneProcessedHistoryImages(messages, { ...cold, sessionManager: store });
+      expect(first).not.toBeNull();
+      expect(store.entries).toHaveLength(1);
+      const grown = [...messages, imageTurn(), assistantTurn()];
+      const second = pruneProcessedHistoryImages(grown, { ...warm, sessionManager: store });
+      expect(store.entries).toHaveLength(1);
+      const firstPrunedCount = first!.filter((m) =>
+        JSON.stringify(m).includes(PRUNED_HISTORY_IMAGE_MARKER),
+      ).length;
+      const secondPrunedCount = (second ?? grown).filter((m) =>
+        JSON.stringify(m).includes(PRUNED_HISTORY_IMAGE_MARKER),
+      ).length;
+      expect(secondPrunedCount).toBe(firstPrunedCount);
+    });
+
+    it("advances the boundary once the cache is cold", () => {
+      const store = makeStore();
+      const messages = conversation(5);
+      pruneProcessedHistoryImages(messages, { ...cold, sessionManager: store });
+      const grown = [...messages, imageTurn(), assistantTurn()];
+      pruneProcessedHistoryImages(grown, { ...cold, now: cold.now + 1, sessionManager: store });
+      expect(store.entries).toHaveLength(2);
+    });
+
+    it("advances the boundary while warm once enough prunable turns pile up behind it", () => {
+      const store = makeStore();
+      const messages = conversation(4);
+      pruneProcessedHistoryImages(messages, { ...cold, sessionManager: store });
+      let grown = messages;
+      for (let i = 0; i < 7; i++) {
+        grown = [...grown, imageTurn(), assistantTurn()];
+        pruneProcessedHistoryImages(grown, { ...warm, sessionManager: store });
       }
+      expect(store.entries).toHaveLength(1);
+      grown = [...grown, imageTurn(), assistantTurn()];
+      pruneProcessedHistoryImages(grown, { ...warm, sessionManager: store });
+      expect(store.entries).toHaveLength(2);
     });
 
-    it("treats no retention as a cold cache and prunes immediately", () => {
-      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
-      expect(
-        pruneProcessedHistoryImages(messages, {
-          cacheRetention: "none",
-          lastCacheTouchAt: Date.now(),
-        }),
-      ).not.toBeNull();
+    it("resets after compaction shrinks the history below the remembered boundary", () => {
+      const store = makeStore();
+      pruneProcessedHistoryImages(conversation(9), { ...cold, sessionManager: store });
+      const compacted = conversation(4);
+      pruneProcessedHistoryImages(compacted, { ...warm, sessionManager: store });
+      expect(store.entries).toHaveLength(2);
     });
 
-    it("passes the resolved policy through the context transform", async () => {
-      const agent: {
-        transformContext?: (messages: AgentMessage[]) => AgentMessage[] | Promise<AgentMessage[]>;
-      } = {};
-      const uninstall = installHistoryImagePruneContextTransform(agent, () => warmPolicy);
-      const messages: AgentMessage[] = [imageTurn(), ...oldEnoughTail()];
-      const transformed = await agent.transformContext?.(messages);
-      expect(transformed).toBe(messages);
-      uninstall();
+    it("behaves like upstream without a policy", () => {
+      const messages = conversation(4);
+      expect(pruneProcessedHistoryImages(messages)).not.toBeNull();
     });
   });
 });

@@ -17,21 +17,29 @@ type PrunableContextAgent = {
 
 export type HistoryImagePruneCacheRetention = "none" | "short" | "long";
 
+type PruneBoundaryStore = {
+  appendCustomEntry?: (customType: string, data: unknown) => void;
+  getEntries?: () => Array<{ type?: unknown; customType?: unknown; data?: unknown }>;
+};
+
 /**
- * Decides whether pruning may be deferred to protect the provider prompt cache.
- * Every prune rewrites an old message, which invalidates every cached prefix
- * that extends past it. While the cache is warm that rewrite is paid for in
- * full on the next call, so pruning waits until the cache has gone cold or
- * until enough prunable turns have piled up to justify one deliberate rewrite.
+ * Decides where the prune boundary sits for this request. Every prune rewrites
+ * an old message, which invalidates every cached prefix that extends past it,
+ * so while the provider prompt cache is warm the boundary stays where it was
+ * on the last cold request instead of advancing one turn per call. It moves
+ * again once the cache has gone cold (the rewrite is free) or once enough
+ * prunable turns have piled up behind it to justify one deliberate rewrite.
  */
 export type HistoryImagePrunePolicy = {
   cacheRetention?: HistoryImagePruneCacheRetention;
   lastCacheTouchAt?: number | null;
   maxDeferredImageTurns?: number;
+  sessionManager?: PruneBoundaryStore;
   now?: number;
 };
 
 export const DEFAULT_MAX_DEFERRED_IMAGE_TURNS = 8;
+export const HISTORY_IMAGE_PRUNE_BOUNDARY_CUSTOM_TYPE = "openclaw.image-prune-boundary";
 
 const CACHE_RETENTION_TTL_MS: Record<HistoryImagePruneCacheRetention, number> = {
   none: 0,
@@ -83,9 +91,9 @@ function messageCarriesPrunableMedia(message: AgentMessage | undefined): boolean
   });
 }
 
-function countPrunableMediaTurns(messages: AgentMessage[], pruneBeforeIndex: number): number {
+function countPrunableMediaTurns(messages: AgentMessage[], from: number, to: number): number {
   let count = 0;
-  for (let i = 0; i < pruneBeforeIndex; i++) {
+  for (let i = Math.max(0, from); i < to; i++) {
     if (messageCarriesPrunableMedia(messages[i])) {
       count += 1;
     }
@@ -93,19 +101,55 @@ function countPrunableMediaTurns(messages: AgentMessage[], pruneBeforeIndex: num
   return count;
 }
 
-export function shouldDeferHistoryImagePrune(
-  messages: AgentMessage[],
-  pruneBeforeIndex: number,
-  policy: HistoryImagePrunePolicy | undefined,
-): boolean {
-  if (!policy || pruneBeforeIndex <= 0) {
-    return false;
+function readFrozenBoundary(store: PruneBoundaryStore | undefined): number | null {
+  if (!store?.getEntries) {
+    return null;
   }
-  if (!isPromptCacheWarm(policy, policy.now ?? Date.now())) {
-    return false;
+  try {
+    const entries = store.getEntries();
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i];
+      if (
+        entry?.type !== "custom" ||
+        entry?.customType !== HISTORY_IMAGE_PRUNE_BOUNDARY_CUSTOM_TYPE
+      ) {
+        continue;
+      }
+      const index = (entry.data as { index?: unknown } | undefined)?.index;
+      return typeof index === "number" && Number.isFinite(index) ? index : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function writeFrozenBoundary(store: PruneBoundaryStore | undefined, index: number): void {
+  store?.appendCustomEntry?.(HISTORY_IMAGE_PRUNE_BOUNDARY_CUSTOM_TYPE, { index });
+}
+
+export function resolveEffectivePruneBoundary(
+  messages: AgentMessage[],
+  policy: HistoryImagePrunePolicy | undefined,
+): number {
+  const natural = resolvePruneBeforeIndex(messages);
+  if (natural < 0 || !policy) {
+    return natural;
+  }
+  const frozen = readFrozenBoundary(policy.sessionManager);
+  const warm = isPromptCacheWarm(policy, policy.now ?? Date.now());
+  if (!warm || frozen === null || frozen > natural) {
+    if (frozen !== natural) {
+      writeFrozenBoundary(policy.sessionManager, natural);
+    }
+    return natural;
   }
   const maxDeferred = policy.maxDeferredImageTurns ?? DEFAULT_MAX_DEFERRED_IMAGE_TURNS;
-  return countPrunableMediaTurns(messages, pruneBeforeIndex) < maxDeferred;
+  if (countPrunableMediaTurns(messages, frozen, natural) >= maxDeferred) {
+    writeFrozenBoundary(policy.sessionManager, natural);
+    return natural;
+  }
+  return frozen;
 }
 
 /**
@@ -177,11 +221,8 @@ export function pruneProcessedHistoryImages(
   messages: AgentMessage[],
   policy?: HistoryImagePrunePolicy,
 ): AgentMessage[] | null {
-  const pruneBeforeIndex = resolvePruneBeforeIndex(messages);
+  const pruneBeforeIndex = resolveEffectivePruneBoundary(messages, policy);
   if (pruneBeforeIndex < 0) {
-    return null;
-  }
-  if (shouldDeferHistoryImagePrune(messages, pruneBeforeIndex, policy)) {
     return null;
   }
 

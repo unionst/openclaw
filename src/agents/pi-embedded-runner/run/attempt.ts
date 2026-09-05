@@ -1475,6 +1475,7 @@ export async function runEmbeddedAttempt(
           provider: params.provider,
           modelId: params.modelId,
         }),
+        sessionManager,
       });
       const removeHistoryImagePruneContextTransform = installHistoryImagePruneContextTransform(
         activeSession.agent,
